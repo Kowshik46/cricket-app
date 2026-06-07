@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080f14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cricket Teams">
+<meta name="description" content="Fair cricket team splitter with skill balancing, custom names, and coin toss">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<title>Cricket Team Maker</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --grass:#2d6a4f;--grass-l:#40916c;--sky:#080f14;--cream:#fdf6e3;
+  --gold:#f4c842;--red:#c62a2a;--muted:rgba(253,246,227,.45);
+  --cb:rgba(255,255,255,.09);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  background:var(--sky);color:var(--cream);font-family:'DM Sans',sans-serif;
+  min-height:100vh;
+  background-image:
+    radial-gradient(ellipse 90% 40% at 50% -5%,rgba(45,106,79,.38) 0%,transparent 65%),
+    radial-gradient(ellipse 50% 40% at 100% 100%,rgba(244,200,66,.05) 0%,transparent 55%);
+}
+.wrap{max-width:520px;margin:0 auto;padding:24px 14px calc(60px + var(--safe-bottom))}
+
+/* HEADER */
+header{text-align:center;margin-bottom:22px;position:relative}
+.bat{font-size:40px;display:block;margin-bottom:6px;animation:sway 3s ease-in-out infinite}
+@keyframes sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+h1{font-family:'Playfair Display',serif;font-size:clamp(1.8rem,7vw,2.6rem);font-weight:900;line-height:1.1;text-shadow:0 0 32px rgba(244,200,66,.22)}
+h1 em{color:var(--gold);font-style:normal}
+.sub{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:2.5px;text-transform:uppercase;color:var(--muted);margin-top:5px}
+
+/* AUTH CHIP */
+.auth-chip{
+  position:absolute;top:0;right:0;
+  display:flex;align-items:center;gap:6px;
+  background:rgba(255,255,255,.06);border:1px solid var(--cb);border-radius:100px;
+  padding:6px 10px;cursor:pointer;transition:all .15s;
+  font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.5px;
+  max-width:140px;
+}
+.auth-chip:hover{border-color:var(--gold);background:rgba(244,200,66,.08)}
+.auth-avatar{width:22px;height:22px;border-radius:50%;background:var(--grass);display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0;color:var(--cream)}
+.auth-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.auth-label.signed-in{color:var(--cream)}
+
+/* SESSION BAR */
+.session-bar{
+  display:flex;align-items:center;gap:8px;margin-bottom:14px;
+  background:rgba(255,255,255,.04);border:1px solid var(--cb);border-radius:12px;padding:10px 12px;
+}
+.session-bar select{
+  flex:1;background:transparent;border:none;color:var(--cream);font-family:'DM Mono',monospace;
+  font-size:.75rem;outline:none;cursor:pointer;
+}
+.session-bar select option{background:#0d1f2d;color:var(--cream)}
+.btn-icon{
+  background:transparent;border:1px solid var(--cb);color:var(--muted);
+  width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;
+}
+.btn-icon:hover{border-color:var(--gold);color:var(--gold)}
+.btn-icon.danger:hover{border-color:var(--red);color:#f08080}
+
+/* STEPPER */
+.steps{display:flex;align-items:center;justify-content:center;margin-bottom:20px}
+.sitem{display:flex;align-items:center;gap:5px}
+.snum{width:28px;height:28px;border-radius:50%;border:2px solid rgba(253,246,227,.18);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);transition:all .3s;flex-shrink:0}
+.snum.on{background:var(--gold);border-color:var(--gold);color:var(--sky);font-weight:700;box-shadow:0 0 14px rgba(244,200,66,.4)}
+.snum.done{background:var(--grass);border-color:var(--grass-l);color:var(--cream)}
+.slabel{font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-family:'DM Mono',monospace}
+.slabel.on{color:var(--gold)}
+.sline{width:26px;height:2px;background:rgba(253,246,227,.1);margin:0 5px;flex-shrink:0}
+
+/* CARD */
+.card{background:rgba(255,255,255,.04);border:1px solid var(--cb);border-radius:18px;padding:18px 14px;backdrop-filter:blur(10px)}
+.ctitle{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.tag{font-family:'DM Mono',monospace;font-size:.58rem;background:var(--grass);color:var(--gold);padding:3px 7px;border-radius:4px;letter-spacing:.8px}
+.hr{height:1px;background:var(--cb);margin:16px 0}
+
+/* FORM */
+.frow{display:flex;gap:8px;margin-bottom:10px}
+.finput{
+  display:block;width:100%;background:rgba(253,246,227,.07);
+  border:1.5px solid rgba(253,246,227,.14);border-radius:12px;
+  padding:14px 15px;color:var(--cream);font-family:'DM Sans',sans-serif;font-size:1rem;
+  outline:none;transition:border-color .2s,box-shadow .2s;
+}
+.finput:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(244,200,66,.12)}
+.finput::placeholder{color:rgba(253,246,227,.28)}
+.finput-sm{padding:11px 13px;font-size:.88rem}
+
+/* SKILL PILLS */
+.skill-label{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:block}
+.skill-pills{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.skill-pills input[type=radio]{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.skill-pills label{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  padding:12px 6px;border-radius:12px;cursor:pointer;
+  border:2px solid rgba(253,246,227,.13);background:rgba(253,246,227,.04);
+  transition:all .18s;user-select:none;-webkit-user-select:none;
+}
+.skill-pills label:active{transform:scale(.96)}
+.skill-pills label .pill-icon{font-size:1.4rem;line-height:1}
+.skill-pills label .pill-name{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);transition:color .18s}
+.skill-pills input#rb-beginner:checked~label[for=rb-beginner],
+.skill-pills label[for=rb-beginner].checked{border-color:rgba(74,144,226,.7);background:rgba(74,144,226,.15);box-shadow:0 0 12px rgba(74,144,226,.2)}
+.skill-pills input#rb-beginner:checked~label[for=rb-beginner] .pill-name,
+.skill-pills label[for=rb-beginner].checked .pill-name{color:#74b2f5}
+.skill-pills input#rb-intermediate:checked~label[for=rb-intermediate],
+.skill-pills label[for=rb-intermediate].checked{border-color:rgba(244,200,66,.7);background:rgba(244,200,66,.13);box-shadow:0 0 12px rgba(244,200,66,.2)}
+.skill-pills input#rb-intermediate:checked~label[for=rb-intermediate] .pill-name,
+.skill-pills label[for=rb-intermediate].checked .pill-name{color:var(--gold)}
+.skill-pills input#rb-expert:checked~label[for=rb-expert],
+.skill-pills label[for=rb-expert].checked{border-color:rgba(45,106,79,.9);background:rgba(45,106,79,.25);box-shadow:0 0 12px rgba(45,106,79,.3)}
+.skill-pills input#rb-expert:checked~label[for=rb-expert] .pill-name,
+.skill-pills label[for=rb-expert].checked .pill-name{color:#74d494}
+
+.btnadd{
+  display:block;width:100%;background:var(--gold);color:var(--sky);
+  border:none;border-radius:12px;padding:14px;
+  font-family:'DM Mono',monospace;font-size:.85rem;font-weight:700;letter-spacing:1.2px;
+  cursor:pointer;transition:all .15s;
+}
+.btnadd:active{transform:scale(.97);opacity:.88}
+
+/* PLAYER LIST */
+.plist{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.ptag{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  background:rgba(253,246,227,.05);border:1px solid rgba(253,246,227,.08);
+  border-radius:10px;padding:11px 12px;animation:pop .25s ease;
+}
+@keyframes pop{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+.pleft{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.pname{font-size:.9rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sbadge{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.8px;text-transform:uppercase;padding:3px 7px;border-radius:4px;flex-shrink:0}
+.sb-beginner{background:rgba(74,144,226,.18);color:#74b2f5;border:1px solid rgba(74,144,226,.3)}
+.sb-intermediate{background:rgba(244,200,66,.14);color:var(--gold);border:1px solid rgba(244,200,66,.3)}
+.sb-expert{background:rgba(45,106,79,.28);color:#74d494;border:1px solid rgba(45,106,79,.4)}
+.btnrm{background:transparent;border:1px solid rgba(198,42,42,.35);color:rgba(230,80,80,.85);padding:7px 11px;font-size:.68rem;border-radius:7px;cursor:pointer;font-family:'DM Mono',monospace;flex-shrink:0;transition:all .15s}
+.btnrm:active{background:rgba(198,42,42,.18)}
+.btnedit{background:transparent;border:1px solid var(--cb);color:var(--muted);padding:7px 11px;font-size:.68rem;border-radius:7px;cursor:pointer;font-family:'DM Mono',monospace;flex-shrink:0;transition:all .15s}
+.btnedit:hover{border-color:rgba(253,246,227,.3);color:var(--cream)}
+.ptag.editing{background:rgba(253,246,227,.05);border-color:rgba(200,169,110,.35);flex-direction:column;align-items:stretch;gap:10px}
+.edit-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.edit-name-input{flex:1;min-width:120px;padding:7px 10px;background:rgba(255,255,255,.06);border:1px solid var(--cb);border-radius:8px;color:var(--cream);font-family:'DM Mono',monospace;font-size:.82rem}
+.edit-skill-pills{display:flex;gap:5px}
+.edit-skill-pills button{padding:4px 10px;border-radius:6px;border:1px solid var(--cb);background:transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:.65rem;cursor:pointer;transition:all .15s}
+.edit-skill-pills button.on{font-weight:700}
+.edit-skill-pills button.on.b{background:rgba(74,144,226,.18);color:#74b2f5;border-color:rgba(74,144,226,.4)}
+.edit-skill-pills button.on.m{background:rgba(200,169,110,.18);color:#f4c842;border-color:rgba(200,169,110,.4)}
+.edit-skill-pills button.on.e{background:rgba(45,106,79,.22);color:#74d494;border-color:rgba(45,106,79,.4)}
+.edit-bowl-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--cb);background:transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:.65rem;cursor:pointer;transition:all .15s}
+.edit-bowl-btn.on{background:rgba(45,106,79,.22);color:#74d494;border-color:rgba(45,106,79,.5)}
+.edit-actions{display:flex;gap:6px;justify-content:flex-end}
+.btn-save-sm{padding:6px 16px;background:var(--gold);color:var(--sky);border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:.7rem;font-weight:700;cursor:pointer}
+.btn-cancel-sm{padding:6px 14px;background:transparent;border:1px solid var(--cb);color:var(--muted);border-radius:7px;font-family:'DM Mono',monospace;font-size:.7rem;cursor:pointer}
+
+.empty{text-align:center;padding:20px 0;color:var(--muted);font-size:.78rem;font-family:'DM Mono',monospace;letter-spacing:.5px}
+.pcount{font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);margin-top:8px;text-align:right}
+.warn{background:rgba(198,42,42,.1);border:1px solid rgba(198,42,42,.3);border-radius:8px;padding:9px 12px;font-size:.76rem;color:#f08080;margin-top:10px}
+.info{background:rgba(74,144,226,.08);border:1px solid rgba(74,144,226,.25);border-radius:8px;padding:9px 12px;font-size:.76rem;color:#74b2f5;margin-top:10px}
+
+/* BIG BUTTON */
+.btnprim{
+  display:block;width:100%;padding:15px;background:var(--grass);color:var(--cream);
+  border:1px solid var(--grass-l);border-radius:12px;
+  font-family:'DM Mono',monospace;font-size:.82rem;letter-spacing:1px;text-transform:uppercase;
+  cursor:pointer;transition:all .15s;
+}
+.btnprim:active{background:var(--grass-l);transform:scale(.98)}
+.btnprim:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+/* SECTION */
+.sec{display:none}.sec.on{display:block}
+
+/* TEAM CARDS */
+.tstack{display:flex;flex-direction:column;gap:14px}
+.tcard{border-radius:14px;overflow:hidden;border:1px solid var(--cb)}
+.thead{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px}
+.ta .thead{background:rgba(45,106,79,.42);border-bottom:1px solid rgba(45,106,79,.42)}
+.tb .thead{background:rgba(198,42,42,.3);border-bottom:1px solid rgba(198,42,42,.3)}
+.tname{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700}
+.capbadge{font-family:'DM Mono',monospace;font-size:.58rem;background:var(--gold);color:var(--sky);padding:3px 7px;border-radius:4px;letter-spacing:.8px;font-weight:700}
+.tplayers{padding:10px 14px;display:flex;flex-direction:column;gap:8px;background:rgba(0,0,0,.18)}
+.trow{display:flex;align-items:center;gap:7px;font-size:.87rem}
+.trow.cap{font-weight:600}
+
+/* ACTION ROW */
+.arow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btnout{
+  flex:1;padding:13px 8px;background:transparent;border:1px solid rgba(253,246,227,.18);
+  color:var(--cream);border-radius:10px;
+  font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:.8px;text-transform:uppercase;
+  cursor:pointer;transition:all .15s;text-align:center;
+}
+.btnout:active{background:rgba(253,246,227,.06)}
+.btnout.gold{background:rgba(244,200,66,.08);border-color:rgba(244,200,66,.35);color:var(--gold)}
+.btnout.green{background:rgba(45,106,79,.12);border-color:rgba(64,145,108,.5);color:#74d494}
+
+/* TOSS */
+.toss-wrap{text-align:center;padding:4px 0}
+.coin-outer{perspective:700px;display:inline-block;margin:18px auto;cursor:pointer}
+.coin{width:96px;height:96px;position:relative;transform-style:preserve-3d}
+.coin.spin{animation:cspin 1.5s cubic-bezier(.25,.1,.25,1) forwards}
+@keyframes cspin{0%{transform:rotateY(0)}100%{transform:rotateY(1440deg)}}
+.cface{position:absolute;inset:0;border-radius:50%;display:flex;align-items:center;justify-content:center;backface-visibility:hidden;-webkit-backface-visibility:hidden;border:4px solid rgba(200,169,110,.5);box-shadow:0 0 20px rgba(244,200,66,.15)}
+.chead{background:radial-gradient(circle at 35% 35%,#f9d76b,#c8a96e);color:var(--sky);font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:900}
+.ctail{background:radial-gradient(circle at 35% 35%,#b8946a,#7a5c12);color:var(--cream);transform:rotateY(180deg);font-size:2rem}
+.tres{font-family:'Playfair Display',serif;font-size:1.45rem;font-weight:700;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s;min-height:1.8rem}
+.tres.show{opacity:1;transform:translateY(0)}
+.tres.heads{color:var(--gold)}.tres.tails{color:#c8a96e}
+.tsub{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;min-height:1.1em}
+.thist{margin-top:12px;font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);max-height:80px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.thist-row{display:flex;gap:10px}
+.thist-row span:first-child{opacity:.5}
+.btntoss{display:block;width:100%;padding:15px;background:linear-gradient(135deg,#c8a96e,#f4c842);color:var(--sky);border:none;border-radius:12px;font-family:'DM Mono',monospace;font-size:.82rem;font-weight:700;letter-spacing:1px;cursor:pointer;transition:all .15s}
+.btntoss:active{transform:scale(.97);opacity:.9}
+
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{background:#0d1f2d;border:1px solid var(--cb);border-radius:20px;padding:22px 18px;width:100%;max-width:360px;animation:slideup .25s ease}
+@keyframes slideup{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal h2{font-family:'Playfair Display',serif;font-size:1.2rem;margin-bottom:14px}
+.modal-actions{display:flex;gap:8px;margin-top:16px}
+.btn-cancel{flex:1;padding:12px;background:transparent;border:1px solid var(--cb);color:var(--muted);border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem}
+.btn-confirm{flex:1;padding:12px;background:var(--gold);color:var(--sky);border:none;border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem;font-weight:700}
+
+/* AUTH MODAL extras */
+.auth-tabs{display:flex;gap:0;margin-bottom:18px;border-radius:10px;overflow:hidden;border:1px solid var(--cb)}
+.auth-tab{flex:1;padding:10px;background:transparent;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.8px;cursor:pointer;transition:all .15s;text-transform:uppercase}
+.auth-tab.on{background:var(--gold);color:var(--sky);font-weight:700}
+.auth-divider{display:flex;align-items:center;gap:10px;margin:12px 0}
+.auth-divider span{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);white-space:nowrap}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--cb)}
+.auth-error{background:rgba(198,42,42,.1);border:1px solid rgba(198,42,42,.3);border-radius:8px;padding:9px 12px;font-size:.76rem;color:#f08080;margin-bottom:10px;display:none}
+.auth-success{background:rgba(45,106,79,.12);border:1px solid rgba(64,145,108,.4);border-radius:8px;padding:9px 12px;font-size:.76rem;color:#74d494;margin-bottom:10px;display:none}
+.btn-full{display:block;width:100%;padding:13px;background:var(--gold);color:var(--sky);border:none;border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.82rem;font-weight:700;letter-spacing:.8px;transition:all .15s;margin-top:10px}
+.btn-full:active{opacity:.85;transform:scale(.98)}
+.btn-full:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-ghost{display:block;width:100%;padding:11px;background:transparent;border:1px solid var(--cb);color:var(--muted);border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.75rem;transition:all .15s;margin-top:8px;text-align:center}
+.btn-ghost:hover{border-color:rgba(253,246,227,.3);color:var(--cream)}
+/* user menu dropdown */
+.user-menu{position:absolute;top:calc(100% + 8px);right:0;background:#0d1f2d;border:1px solid var(--cb);border-radius:12px;padding:6px;min-width:160px;z-index:300;animation:slideup .15s ease}
+.user-menu-email{font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);padding:6px 10px 8px;border-bottom:1px solid var(--cb);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-menu-btn{display:block;width:100%;text-align:left;padding:9px 10px;background:transparent;border:none;color:var(--cream);font-family:'DM Mono',monospace;font-size:.72rem;cursor:pointer;border-radius:7px;transition:background .15s}
+.user-menu-btn:hover{background:rgba(255,255,255,.07)}
+.user-menu-btn.danger{color:#f08080}
+
+/* CAN BOWL TOGGLE */
+.bowl-toggle-wrap{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:10px 12px;background:rgba(253,246,227,.04);border:1.5px solid rgba(253,246,227,.1);border-radius:12px;cursor:pointer;transition:all .18s;user-select:none;-webkit-user-select:none}
+.bowl-toggle-wrap.on{border-color:rgba(45,106,79,.7);background:rgba(45,106,79,.14);box-shadow:0 0 10px rgba(45,106,79,.2)}
+.bowl-toggle{width:38px;height:22px;border-radius:11px;background:rgba(253,246,227,.15);position:relative;flex-shrink:0;transition:background .2s}
+.bowl-toggle-wrap.on .bowl-toggle{background:var(--grass-l)}
+.bowl-toggle::after{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:3px;left:3px;transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.bowl-toggle-wrap.on .bowl-toggle::after{transform:translateX(16px)}
+.bowl-toggle-text{font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);transition:color .18s}
+.bowl-toggle-wrap.on .bowl-toggle-text{color:#74d494}
+.sb-bowl{background:rgba(45,106,79,.22);color:#74d494;border:1px solid rgba(45,106,79,.4);font-size:.52rem;padding:2px 5px}
+
+/* TEAMS ADD-PLAYER PANEL */
+.add-player-panel{margin-top:14px;border-top:1px solid var(--cb);padding-top:14px}
+.add-player-toggle{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:4px 0}
+.add-player-toggle span{font-family:'DM Mono',monospace;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.add-player-toggle .chevron{font-size:.75rem;color:var(--muted);transition:transform .2s}
+.add-player-toggle.open .chevron{transform:rotate(180deg)}
+.add-player-form{display:none;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.add-player-form.hidden{display:none}
+.team-pick{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.team-pick-btn{padding:10px 6px;background:transparent;border:2px solid rgba(253,246,227,.13);border-radius:10px;font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);cursor:pointer;transition:all .18s;text-align:center}
+.team-pick-btn.pick-a.sel{border-color:rgba(45,106,79,.8);background:rgba(45,106,79,.2);color:#74d494}
+.team-pick-btn.pick-b.sel{border-color:rgba(198,42,42,.7);background:rgba(198,42,42,.15);color:#f08080}
+
+/* SHARE SHEET */
+.share-content{font-family:'DM Mono',monospace;font-size:.72rem;background:rgba(0,0,0,.3);border-radius:10px;padding:14px;white-space:pre-wrap;word-break:break-all;color:var(--cream);max-height:220px;overflow-y:auto;line-height:1.7;border:1px solid var(--cb)}
+.share-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+
+/* SPINNER */
+.spin-inline{display:inline-block;width:14px;height:14px;border:2px solid rgba(253,246,227,.3);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* LOADING OVERLAY */
+.loading-overlay{position:fixed;inset:0;background:rgba(8,15,20,.8);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.loading-overlay.on{opacity:1;pointer-events:all}
+.spinner{width:44px;height:44px;border:3px solid rgba(244,200,66,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+
+/* TOAST */
+.toast{position:fixed;bottom:calc(24px + var(--safe-bottom));left:50%;transform:translateX(-50%) translateY(80px);background:rgba(30,80,55,.96);color:var(--cream);padding:11px 22px;border-radius:100px;font-size:.78rem;font-family:'DM Mono',monospace;letter-spacing:.8px;transition:transform .35s cubic-bezier(.34,1.56,.64,1);z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.error{background:rgba(140,20,20,.96)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="bat">🏏</span>
+    <h1>Cricket <em>Team</em> Maker</h1>
+    <p class="sub">Fair splits · Skill balanced · Coin toss</p>
+
+    <!-- AUTH CHIP -->
+    <div class="auth-chip" id="authChip" onclick="onAuthChipClick()">
+      <div class="auth-avatar" id="authAvatar">?</div>
+      <span class="auth-label" id="authLabel">Sign in</span>
+    </div>
+    <!-- USER DROPDOWN (hidden by default) -->
+    <div class="user-menu" id="userMenu" style="display:none">
+      <div class="user-menu-email" id="userMenuEmail"></div>
+      <a class="user-menu-btn" href="/profile" style="display:block;text-decoration:none" onclick="closeUserMenu()">👤 My Profile</a>
+      <button class="user-menu-btn danger" onclick="signOut()">Sign out</button>
+    </div>
+  </header>
+
+  <!-- SESSION BAR -->
+  <div class="session-bar">
+    <select id="sessionSelect" onchange="onSessionChange()">
+      <option value="">— select or create a match —</option>
+    </select>
+    <button class="btn-icon" title="New match" onclick="openNewSessionModal()">＋</button>
+    <button class="btn-icon" id="renameSessionBtn" title="Rename match" onclick="openRenameModal()" style="display:none">✎</button>
+    <button class="btn-icon danger" id="deleteSessionBtn" title="Delete match" onclick="confirmDeleteSession()" style="display:none">🗑</button>
+  </div>
+
+  <div class="steps">
+    <div class="sitem"><div class="snum on" id="sn1">1</div><span class="slabel on" id="sl1">Players</span></div>
+    <div class="sline"></div>
+    <div class="sitem"><div class="snum" id="sn2">2</div><span class="slabel" id="sl2">Teams</span></div>
+    <div class="sline"></div>
+    <div class="sitem"><div class="snum" id="sn3">3</div><span class="slabel" id="sl3">Toss</span></div>
+  </div>
+
+  <!-- SEC 1: PLAYERS -->
+  <div class="sec on" id="sec1">
+    <div class="card">
+      <div class="ctitle">Add Players <span class="tag">STEP 1</span></div>
+      <div id="noSessionInfo" class="info" style="display:none">Create or select a match above to start adding players.</div>
+      <div id="playerForm">
+        <input class="finput" type="text" id="nameInput" placeholder="Player name…" maxlength="30" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false">
+        <span class="skill-label">Skill Level</span>
+        <div class="skill-pills">
+          <input type="radio" name="skill" id="rb-beginner" value="beginner">
+          <label for="rb-beginner" onclick="setPill('beginner')">
+            <span class="pill-icon">🔵</span><span class="pill-name">Beginner</span>
+          </label>
+          <input type="radio" name="skill" id="rb-intermediate" value="intermediate" checked>
+          <label for="rb-intermediate" onclick="setPill('intermediate')">
+            <span class="pill-icon">🟡</span><span class="pill-name">Inter</span>
+          </label>
+          <input type="radio" name="skill" id="rb-expert" value="expert">
+          <label for="rb-expert" onclick="setPill('expert')">
+            <span class="pill-icon">🟢</span><span class="pill-name">Expert</span>
+          </label>
+        </div>
+        <div class="bowl-toggle-wrap" id="bowlToggle" onclick="toggleBowl()">
+          <div class="bowl-toggle"></div>
+          <span class="bowl-toggle-text">Can Bowl</span>
+          <span style="margin-left:auto;font-size:.85rem">🏏</span>
+        </div>
+        <button class="btnadd" onclick="addPlayer()">+ ADD PLAYER</button>
+      </div>
+      <div class="plist" id="plist"></div>
+      <div class="empty" id="emptyMsg">No players yet — add at least 2 to start.</div>
+      <div class="pcount" id="pcount"></div>
+      <div class="warn" id="warnMsg" style="display:none"></div>
+      <div class="hr"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btnprim" id="genBtn" onclick="openGenerateModal()" disabled style="flex:1">⚡ Generate Teams</button>
+        <button class="btnout gold" id="viewTeamsBtn" onclick="goToTeams()" style="display:none;flex:0 0 auto;padding:15px 14px">View Teams →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEC 2: TEAMS -->
+  <div class="sec" id="sec2">
+    <div class="card">
+      <div class="ctitle">The Teams <span class="tag">STEP 2</span></div>
+      <div class="tstack" id="tstack"></div>
+      <div class="arow">
+        <button class="btnout" onclick="goTo(1)">← Players</button>
+        <button class="btnout" onclick="reshuffle()">🔀 Reshuffle</button>
+        <button class="btnout green" onclick="shareTeams()">📋 Share</button>
+        <button class="btnout gold" onclick="goTo(3)">Toss →</button>
+      </div>
+
+      <!-- ADD PLAYER TO TEAM PANEL -->
+      <div class="add-player-panel">
+        <div class="add-player-toggle" id="addPlayerToggle" onclick="toggleAddPlayerPanel()">
+          <span>+ Add Late Player</span>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="add-player-form hidden" id="addPlayerForm">
+          <input class="finput finput-sm" type="text" id="latePlayerName" placeholder="Player name…" maxlength="30" autocomplete="off" autocapitalize="words" spellcheck="false">
+          <span class="skill-label">Skill Level</span>
+          <div class="skill-pills">
+            <input type="radio" name="lskill" id="lrb-beginner" value="beginner">
+            <label for="lrb-beginner" onclick="setLPill('beginner')">
+              <span class="pill-icon">🔵</span><span class="pill-name">Beginner</span>
+            </label>
+            <input type="radio" name="lskill" id="lrb-intermediate" value="intermediate" checked>
+            <label for="lrb-intermediate" onclick="setLPill('intermediate')">
+              <span class="pill-icon">🟡</span><span class="pill-name">Inter</span>
+            </label>
+            <input type="radio" name="lskill" id="lrb-expert" value="expert">
+            <label for="lrb-expert" onclick="setLPill('expert')">
+              <span class="pill-icon">🟢</span><span class="pill-name">Expert</span>
+            </label>
+          </div>
+          <div class="bowl-toggle-wrap" id="lateBowlToggle" onclick="toggleLateBowl()">
+            <div class="bowl-toggle"></div>
+            <span class="bowl-toggle-text">Can Bowl</span>
+            <span style="margin-left:auto;font-size:.85rem">🏏</span>
+          </div>
+          <span class="skill-label" style="margin-top:2px">Add to Team</span>
+          <div class="team-pick" id="teamPick">
+            <button class="team-pick-btn pick-a sel" id="pickA" onclick="selectTeamPick('a')">🟢 Team A</button>
+            <button class="team-pick-btn pick-b" id="pickB" onclick="selectTeamPick('b')">🔴 Team B</button>
+          </div>
+          <button class="btnadd" onclick="addLatePlayer()" style="margin-top:4px">+ ADD TO TEAM</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEC 3: TOSS -->
+  <div class="sec" id="sec3">
+    <div class="card">
+      <div class="ctitle">Coin Toss <span class="tag">STEP 3</span></div>
+      <div class="toss-wrap">
+        <p style="font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">TAP THE COIN TO TOSS</p>
+        <div class="coin-outer" onclick="tossCoin()">
+          <div class="coin" id="coin">
+            <div class="cface chead">H</div>
+            <div class="cface ctail">🏏</div>
+          </div>
+        </div>
+        <div class="tres" id="tres"></div>
+        <div class="tsub" id="tsub"></div>
+        <div class="thist" id="thist"></div>
+      </div>
+      <div class="hr"></div>
+      <button class="btntoss" onclick="tossCoin()">🪙 Toss Again</button>
+      <div class="arow" style="margin-top:10px">
+        <button class="btnout" onclick="goTo(2)">← Teams</button>
+        <button class="btnout" onclick="confirmNewMatch()">🔄 New Match</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- RENAME MATCH MODAL -->
+<div class="modal-bg" id="renameSessionModal">
+  <div class="modal">
+    <h2>Rename Match</h2>
+    <input class="finput finput-sm" type="text" id="renameSessionName" placeholder="Match name" maxlength="60" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('renameSessionModal')">Cancel</button>
+      <button class="btn-confirm" onclick="renameSession()">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW SESSION MODAL -->
+<div class="modal-bg" id="newSessionModal">
+  <div class="modal">
+    <h2>New Match</h2>
+    <input class="finput finput-sm" type="text" id="newSessionName" placeholder="Match name (e.g. Sunday Park Game)" maxlength="60" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('newSessionModal')">Cancel</button>
+      <button class="btn-confirm" onclick="createSession()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- GENERATE TEAMS MODAL (custom team names) -->
+<div class="modal-bg" id="generateModal">
+  <div class="modal">
+    <h2>Name Your Teams</h2>
+    <input class="finput finput-sm" type="text" id="teamAName" placeholder="Team A name" maxlength="40" autocomplete="off" style="margin-bottom:10px">
+    <input class="finput finput-sm" type="text" id="teamBName" placeholder="Team B name" maxlength="40" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('generateModal')">Cancel</button>
+      <button class="btn-confirm" onclick="makeTeams()">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHARE MODAL -->
+<div class="modal-bg" id="shareModal">
+  <div class="modal">
+    <h2>Share Teams</h2>
+    <div class="share-content" id="shareText"></div>
+    <div class="share-actions">
+      <button class="btn-cancel" onclick="closeModal('shareModal')">Close</button>
+      <button class="btn-confirm" onclick="copyShare()">📋 Copy</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="modal-bg" id="confirmModal">
+  <div class="modal">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p id="confirmMsg" style="color:var(--muted);font-size:.85rem;margin-top:-4px"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('confirmModal')">Cancel</button>
+      <button class="btn-confirm" id="confirmOk" style="background:var(--red);color:#fff">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="modal-bg" id="authModal">
+  <div class="modal">
+    <h2 id="authModalTitle">Welcome</h2>
+    <!-- tabs -->
+    <div class="auth-tabs">
+      <button class="auth-tab on" id="tabSignIn" onclick="switchAuthTab('signin')">Sign In</button>
+      <button class="auth-tab" id="tabSignUp" onclick="switchAuthTab('signup')">Sign Up</button>
+    </div>
+    <!-- feedback -->
+    <div class="auth-error" id="authError"></div>
+    <div class="auth-success" id="authSuccess"></div>
+    <!-- form -->
+    <input class="finput finput-sm" type="text" id="authDisplayName" placeholder="Display name (shown in app)" autocomplete="off" style="margin-bottom:10px;display:none">
+    <input class="finput finput-sm" type="email" id="authEmail" placeholder="Email address" autocomplete="email" style="margin-bottom:10px">
+    <input class="finput finput-sm" type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+    <div id="forgotPwRow" style="text-align:right;margin-top:6px">
+      <button onclick="openForgotModal()" style="background:none;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:.72rem;cursor:pointer;padding:0;text-decoration:underline">Forgot password?</button>
+    </div>
+    <button class="btn-full" id="authSubmitBtn" onclick="submitAuth()">Sign In</button>
+    <button class="btn-ghost" onclick="closeModal('authModal')">Continue as guest</button>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div class="modal-bg" id="forgotModal">
+  <div class="modal">
+    <h2>Reset Password</h2>
+    <p style="color:var(--muted);font-size:.82rem;margin-bottom:14px;line-height:1.5">Enter your email and we'll send you a link to reset your password.</p>
+    <div class="auth-error" id="forgotError"></div>
+    <div class="auth-success" id="forgotSuccess"></div>
+    <input class="finput finput-sm" type="email" id="forgotEmail" placeholder="Email address" autocomplete="email">
+    <button class="btn-full" id="forgotSubmitBtn" onclick="submitForgotPassword()">Send Reset Link</button>
+    <button class="btn-ghost" onclick="closeModal('forgotModal')">Back to Sign In</button>
+  </div>
+</div>
+
+<!-- SET NEW PASSWORD MODAL (opened on PASSWORD_RECOVERY) -->
+<div class="modal-bg" id="resetPwModal">
+  <div class="modal">
+    <h2>Set New Password</h2>
+    <p style="color:var(--muted);font-size:.82rem;margin-bottom:14px;line-height:1.5">Choose a new password for your account.</p>
+    <div class="auth-error" id="resetPwError"></div>
+    <input class="finput finput-sm" type="password" id="resetPwInput" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:10px">
+    <input class="finput finput-sm" type="password" id="resetPwConfirm" placeholder="Confirm new password" autocomplete="new-password">
+    <button class="btn-full" id="resetPwSubmitBtn" onclick="submitResetPassword()">Update Password</button>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loader"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
+
+<!-- Supabase JS SDK (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<script>
+// ─── Supabase Auth client (browser-side) ─────────────────────────────────────
+var SUPA_URL  = '{{ supabase_url }}';
+var SUPA_ANON = '{{ supabase_anon_key }}';
+var supaAuth  = null;
+if(SUPA_URL && SUPA_ANON && !SUPA_ANON.startsWith('your-')) {
+  try {
+    // UMD bundle exposes supabase.createClient
+    var _sb = window.supabase || (window.supabase_js);
+    supaAuth = _sb.createClient(SUPA_URL, SUPA_ANON);
+  } catch(e) {
+    console.warn('Supabase client init failed:', e);
+  }
+}
+
+// ─── State ───────────────────────────────────────────────────────────────────
+var currentSessionId = null;
+var players = [];
+var teamsData = null;
+var tossN = 0;
+var tossing = false;
+var currentUser = null;
+var canBowl = false;         // step-1 add-player toggle
+var lateCanBowl = false;     // step-2 late-player toggle
+var lateTeamPick = 'a';      // which team the late player goes to
+
+var LS_KEY = 'cricket_last_session';
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+setPill('intermediate');
+setLPill('intermediate');
+document.getElementById('nameInput').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); addPlayer(); }
+});
+document.getElementById('latePlayerName').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); addLatePlayer(); }
+});
+document.getElementById('newSessionName').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); createSession(); }
+});
+document.getElementById('renameSessionName').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); renameSession(); }
+});
+document.getElementById('authEmail').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('authPassword').focus(); }
+});
+document.getElementById('authPassword').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); submitAuth(); }
+});
+
+// Close user menu when clicking outside
+document.addEventListener('click', function(e){
+  var menu = document.getElementById('userMenu');
+  var chip = document.getElementById('authChip');
+  if(menu.style.display !== 'none' && !menu.contains(e.target) && !chip.contains(e.target)){
+    menu.style.display = 'none';
+  }
+});
+
+initAuth();
+
+// ─── Auth Init ────────────────────────────────────────────────────────────────
+async function initAuth(){
+  if(!supaAuth){
+    // Anon key not configured — chip stays visible but clicking shows setup hint
+    updateAuthChip();
+    await loadSessions();
+    return;
+  }
+
+  // Listen for auth state changes (login, logout, token refresh)
+  // Check current session on startup first, before attaching the listener,
+  // so we know whether a subsequent SIGNED_IN event is a fresh login or a refresh.
+  var { data: { session: initSession } } = await supaAuth.auth.getSession();
+  if(initSession){
+    currentUser = initSession.user;
+    updateAuthChip();
+    fetchDisplayName(initSession.access_token);
+  }
+
+  supaAuth.auth.onAuthStateChange(async function(event, session){
+    currentUser = session ? session.user : null;
+    updateAuthChip();
+
+    if(event === 'PASSWORD_RECOVERY'){
+      // User clicked the reset link — show the set-new-password modal
+      document.getElementById('resetPwInput').value = '';
+      document.getElementById('resetPwConfirm').value = '';
+      document.getElementById('resetPwError').style.display = 'none';
+      document.getElementById('resetPwSubmitBtn').disabled = false;
+      openModal('resetPwModal');
+      return;
+    }
+
+    if(event === 'SIGNED_IN' && !initSession){
+      // Only treat as fresh login if there was no session at startup
+      initSession = session; // prevent duplicate on token refresh
+      fetchDisplayName(session.access_token);
+      await claimAnonymousSessions(session.access_token);
+      await loadSessions();
+    } else if(event === 'SIGNED_OUT'){
+      initSession = null;
+      currentDisplayName = '';
+      await loadSessions();
+    }
+    // INITIAL_SESSION / TOKEN_REFRESHED: session already loaded below, skip
+  });
+
+  await loadSessions();
+}
+
+var currentDisplayName = '';
+
+async function fetchDisplayName(accessToken){
+  try {
+    var res = await fetch('/api/profile/display_name', {
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    if(res.ok){
+      var data = await res.json();
+      currentDisplayName = (data.display_name || '').trim();
+    }
+  } catch(e){ /* silent */ }
+  updateAuthChip();
+}
+
+function updateAuthChip(){
+  var chip   = document.getElementById('authChip');
+  var avatar = document.getElementById('authAvatar');
+  var label  = document.getElementById('authLabel');
+  if(currentUser){
+    var email = currentUser.email || '';
+    var name  = currentDisplayName || email.split('@')[0] || 'Account';
+    var initial = currentDisplayName ? currentDisplayName.charAt(0).toUpperCase()
+                                     : email.charAt(0).toUpperCase() || 'U';
+    avatar.textContent = initial;
+    label.textContent  = name;
+    label.classList.add('signed-in');
+    chip.title = email;
+  } else {
+    currentDisplayName = '';
+    avatar.textContent = '?';
+    label.textContent  = 'Sign in';
+    label.classList.remove('signed-in');
+    chip.title = '';
+  }
+}
+
+function onAuthChipClick(){
+  if(currentUser){
+    var menu = document.getElementById('userMenu');
+    var email = currentUser.email || '';
+    var menuLabel = currentDisplayName ? currentDisplayName + '\n' + email : email;
+    var el = document.getElementById('userMenuEmail');
+    if(currentDisplayName){
+      el.innerHTML = '<strong style="color:var(--cream);display:block">' + currentDisplayName + '</strong>' + email;
+    } else {
+      el.textContent = email;
+    }
+    menu.style.display = menu.style.display === 'none' ? '' : 'none';
+  } else if(!supaAuth){
+    toast('Set SUPABASE_ANON_KEY in .env to enable sign-in', true);
+  } else {
+    openAuthModal();
+  }
+}
+
+function closeUserMenu(){ document.getElementById('userMenu').style.display = 'none'; }
+
+async function signOut(){
+  closeUserMenu();
+  if(!supaAuth) return;
+  loading(true);
+  try {
+    await supaAuth.auth.signOut();
+    currentUser = null;
+    localStorage.removeItem(LS_KEY);
+    currentSessionId = null; players = []; teamsData = null;
+    updateAuthChip();
+    toast('Signed out.');
+    await loadSessions();
+  } catch(e){
+    toast('Sign-out failed: ' + e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+// ─── Auth Modal ───────────────────────────────────────────────────────────────
+var authMode = 'signin';
+
+function openAuthModal(){
+  switchAuthTab('signin');
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  document.getElementById('authDisplayName').value = '';
+  hideAuthFeedback();
+  openModal('authModal');
+  setTimeout(function(){ document.getElementById('authEmail').focus(); }, 80);
+}
+
+function switchAuthTab(mode){
+  authMode = mode;
+  document.getElementById('tabSignIn').classList.toggle('on', mode === 'signin');
+  document.getElementById('tabSignUp').classList.toggle('on', mode === 'signup');
+  document.getElementById('authModalTitle').textContent = mode === 'signin' ? 'Welcome back' : 'Create account';
+  document.getElementById('authSubmitBtn').textContent  = mode === 'signin' ? 'Sign In' : 'Sign Up';
+  document.getElementById('authPassword').autocomplete  = mode === 'signin' ? 'current-password' : 'new-password';
+  document.getElementById('authDisplayName').style.display = mode === 'signup' ? '' : 'none';
+  document.getElementById('forgotPwRow').style.display = mode === 'signin' ? '' : 'none';
+  hideAuthFeedback();
+}
+
+function hideAuthFeedback(){
+  document.getElementById('authError').style.display   = 'none';
+  document.getElementById('authSuccess').style.display = 'none';
+}
+
+function showAuthError(msg){
+  var el = document.getElementById('authError');
+  el.textContent = msg; el.style.display = 'block';
+  document.getElementById('authSuccess').style.display = 'none';
+}
+
+function showAuthSuccess(msg){
+  var el = document.getElementById('authSuccess');
+  el.textContent = msg; el.style.display = 'block';
+  document.getElementById('authError').style.display = 'none';
+}
+
+async function submitAuth(){
+  if(!supaAuth) return;
+  var email    = document.getElementById('authEmail').value.trim();
+  var password = document.getElementById('authPassword').value;
+  if(!email || !password){ showAuthError('Please enter email and password.'); return; }
+
+  var btn = document.getElementById('authSubmitBtn');
+  btn.disabled = true;
+  hideAuthFeedback();
+
+  try {
+    if(authMode === 'signin'){
+      var { error } = await supaAuth.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+      closeModal('authModal');
+      toast('Signed in!');
+    } else {
+      var displayName = document.getElementById('authDisplayName').value.trim();
+      var { data: signUpData, error } = await supaAuth.auth.signUp({ email, password });
+      if(error) throw error;
+      // Supabase silently "succeeds" for duplicate emails when confirmation is on.
+      // A duplicate returns a user with an empty identities array.
+      if(signUpData && signUpData.user && Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0){
+        showAuthError('An account with this email already exists. Please sign in instead.');
+        return;
+      }
+      // Save display name immediately if provided and we got a session (auto-confirm on)
+      if(displayName && signUpData && signUpData.session && signUpData.session.access_token){
+        try {
+          await fetch('/api/profile/display_name', {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + signUpData.session.access_token,
+            },
+            body: JSON.stringify({ display_name: displayName }),
+          });
+        } catch(e2){ /* non-fatal */ }
+      }
+      showAuthSuccess('Account created! Check your email to confirm, then sign in.');
+    }
+  } catch(e){
+    showAuthError(e.message || 'Authentication failed.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─── Forgot / Reset password ──────────────────────────────────────────────────
+function openForgotModal(){
+  closeModal('authModal');
+  document.getElementById('forgotEmail').value = '';
+  document.getElementById('forgotError').style.display = 'none';
+  document.getElementById('forgotSuccess').style.display = 'none';
+  document.getElementById('forgotSubmitBtn').disabled = false;
+  openModal('forgotModal');
+  setTimeout(function(){ document.getElementById('forgotEmail').focus(); }, 80);
+}
+
+async function submitForgotPassword(){
+  var email = document.getElementById('forgotEmail').value.trim();
+  var errEl = document.getElementById('forgotError');
+  var okEl  = document.getElementById('forgotSuccess');
+  errEl.style.display = 'none'; okEl.style.display = 'none';
+  if(!email){ errEl.textContent = 'Please enter your email address.'; errEl.style.display = 'block'; return; }
+
+  var btn = document.getElementById('forgotSubmitBtn');
+  btn.disabled = true;
+  try {
+    var { error } = await supaAuth.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/',
+    });
+    if(error) throw error;
+    okEl.textContent = 'Reset link sent! Check your inbox.';
+    okEl.style.display = 'block';
+  } catch(e){
+    errEl.textContent = e.message || 'Failed to send reset link.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+  }
+}
+
+async function submitResetPassword(){
+  var pw      = document.getElementById('resetPwInput').value;
+  var confirm = document.getElementById('resetPwConfirm').value;
+  var errEl   = document.getElementById('resetPwError');
+  errEl.style.display = 'none';
+  if(pw.length < 6){ errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+  if(pw !== confirm){ errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
+
+  var btn = document.getElementById('resetPwSubmitBtn');
+  btn.disabled = true;
+  try {
+    var { error } = await supaAuth.auth.updateUser({ password: pw });
+    if(error) throw error;
+    closeModal('resetPwModal');
+    toast('Password updated! You are now signed in.');
+  } catch(e){
+    errEl.textContent = e.message || 'Failed to update password.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+  }
+}
+
+// ─── Claim anonymous sessions ─────────────────────────────────────────────────
+async function claimAnonymousSessions(accessToken){
+  // Collect all session UUIDs from localStorage and the current dropdown
+  var ids = [];
+  var last = localStorage.getItem(LS_KEY);
+  if(last) ids.push(last);
+
+  // Also grab any session ids already in the dropdown that might not be the last one
+  var sel = document.getElementById('sessionSelect');
+  for(var i = 0; i < sel.options.length; i++){
+    var v = sel.options[i].value;
+    if(v && !ids.includes(v)) ids.push(v);
+  }
+
+  if(!ids.length) return;
+
+  try {
+    await api('POST', '/auth/claim', { session_ids: ids }, accessToken);
+  } catch(e){
+    console.warn('Claim failed:', e.message);
+  }
+}
+
+// ─── API helpers ─────────────────────────────────────────────────────────────
+async function getAccessToken(){
+  if(!supaAuth) return null;
+  var { data: { session } } = await supaAuth.auth.getSession();
+  return session ? session.access_token : null;
+}
+
+async function api(method, path, body, overrideToken){
+  var token = overrideToken !== undefined ? overrideToken : await getAccessToken();
+  var headers = { 'Content-Type': 'application/json' };
+  if(token) headers['Authorization'] = 'Bearer ' + token;
+  var opts = { method: method, headers: headers };
+  if(body) opts.body = JSON.stringify(body);
+  var r = await fetch('/api' + path, opts);
+  if(!r.ok){
+    var err = await r.json().catch(function(){ return { detail: r.statusText }; });
+    throw new Error(err.detail || r.statusText);
+  }
+  if(r.status === 204) return null;
+  return r.json();
+}
+
+// ─── Sessions ─────────────────────────────────────────────────────────────────
+var _loadingSessionsLock = false;
+async function loadSessions(){
+  if(_loadingSessionsLock) return;
+  _loadingSessionsLock = true;
+  loading(true);
+  try {
+    var sessions = await api('GET', '/sessions');
+    var sel = document.getElementById('sessionSelect');
+    sel.innerHTML = '<option value="">— select or create a match —</option>';
+    sessions.forEach(function(s){
+      var opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name + '  (' + fmtDate(s.created_at) + ')';
+      sel.appendChild(opt);
+    });
+    var last = localStorage.getItem(LS_KEY);
+    if(last && sessions.find(function(s){ return s.id === last; })){
+      sel.value = last;
+      await selectSession(last);
+    } else {
+      renderPlayers();
+    }
+  } catch(e){
+    toast('Could not load sessions: ' + e.message, true);
+  } finally {
+    _loadingSessionsLock = false;
+    loading(false);
+  }
+}
+
+async function createSession(){
+  var name = document.getElementById('newSessionName').value.trim() || 'Match';
+  closeModal('newSessionModal');
+  loading(true);
+  try {
+    var s = await api('POST', '/sessions', { name: name });
+    currentSessionId = s.id;
+    localStorage.setItem(LS_KEY, s.id);
+    players = [];
+    teamsData = null;
+    await loadSessions();
+    document.getElementById('sessionSelect').value = s.id;
+    document.getElementById('deleteSessionBtn').style.display = ''; document.getElementById('renameSessionBtn').style.display = '';
+    document.getElementById('noSessionInfo').style.display = 'none';
+    document.getElementById('playerForm').style.display = '';
+    renderPlayers();
+    goTo(1);
+    toast('Match "' + name + '" created!');
+  } catch(e){
+    toast('Failed: ' + e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+function onSessionChange(){
+  var id = document.getElementById('sessionSelect').value;
+  if(!id){ currentSessionId = null; players = []; teamsData = null; renderPlayers(); document.getElementById('deleteSessionBtn').style.display = 'none'; document.getElementById('renameSessionBtn').style.display = 'none'; return; }
+  selectSession(id);
+}
+
+async function selectSession(id){
+  loading(true);
+  try {
+    currentSessionId = id;
+    localStorage.setItem(LS_KEY, id);
+    document.getElementById('deleteSessionBtn').style.display = ''; document.getElementById('renameSessionBtn').style.display = '';
+    document.getElementById('noSessionInfo').style.display = 'none';
+    document.getElementById('playerForm').style.display = '';
+    var loaded = await api('GET', '/sessions/' + id + '/players');
+    players = loaded;
+    // Try to restore existing teams without regenerating
+    try {
+      teamsData = await api('GET', '/sessions/' + id + '/teams');
+    } catch(e){
+      teamsData = null; // 404 = no teams yet, that's fine
+    }
+    renderPlayers();
+    goTo(1);
+  } catch(e){
+    toast('Failed to load session: ' + e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+function goToTeams(){
+  if(teamsData){ renderTeams(); goTo(2); }
+}
+
+function confirmDeleteSession(){
+  document.getElementById('confirmTitle').textContent = 'Delete this match?';
+  document.getElementById('confirmMsg').textContent = 'All players and teams for this match will be deleted permanently.';
+  document.getElementById('confirmOk').onclick = deleteSession;
+  openModal('confirmModal');
+}
+
+async function deleteSession(){
+  closeModal('confirmModal');
+  if(!currentSessionId) return;
+  loading(true);
+  try {
+    await api('DELETE', '/sessions/' + currentSessionId);
+    localStorage.removeItem(LS_KEY);
+    currentSessionId = null; players = []; teamsData = null;
+    document.getElementById('deleteSessionBtn').style.display = 'none';
+    document.getElementById('renameSessionBtn').style.display = 'none';
+    document.getElementById('noSessionInfo').style.display = 'block';
+    document.getElementById('playerForm').style.display = 'none';
+    await loadSessions();
+    renderPlayers();
+    goTo(1);
+    toast('Match deleted.');
+  } catch(e){
+    toast('Failed: ' + e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+// ─── Players ─────────────────────────────────────────────────────────────────
+async function addPlayer(){
+  if(!currentSessionId){ toast('Select or create a match first!'); return; }
+  var name = document.getElementById('nameInput').value.trim();
+  if(!name){ toast('Enter a name first!'); return; }
+  var skill = getSkill();
+  loading(true);
+  try {
+    var p = await api('POST', '/sessions/' + currentSessionId + '/players', { name: name, skill: skill, can_bowl: canBowl });
+    players.push(p);
+    document.getElementById('nameInput').value = '';
+    document.getElementById('nameInput').focus();
+    renderPlayers();
+    toast(name + ' added!');
+  } catch(e){
+    toast(e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+async function removePlayer(pid){
+  if(!currentSessionId) return;
+  loading(true);
+  try {
+    await api('DELETE', '/sessions/' + currentSessionId + '/players/' + pid);
+    players = players.filter(function(p){ return p.id !== pid; });
+    renderPlayers();
+  } catch(e){
+    toast('Failed to remove: ' + e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+var _editingPlayerId = null;
+
+function editPlayer(pid){
+  _editingPlayerId = pid;
+  renderPlayers();
+  // focus the name input after render
+  setTimeout(function(){
+    var inp = document.getElementById('edit-name-' + pid);
+    if(inp){ inp.focus(); inp.select(); }
+  }, 30);
+}
+
+function cancelPlayerEdit(){
+  _editingPlayerId = null;
+  renderPlayers();
+}
+
+async function savePlayerEdit(pid){
+  var nameInp = document.getElementById('edit-name-' + pid);
+  var name = nameInp ? nameInp.value.trim() : null;
+  if(!name){ toast('Name cannot be empty.', true); return; }
+
+  // read selected skill
+  var skillBtns = document.querySelectorAll('#edit-skill-' + pid + ' button');
+  var skill = null;
+  skillBtns.forEach(function(b){ if(b.classList.contains('on')) skill = b.dataset.skill; });
+
+  // read bowl toggle
+  var bowlBtn = document.getElementById('edit-bowl-' + pid);
+  var can_bowl = bowlBtn ? bowlBtn.classList.contains('on') : false;
+
+  var orig = players.find(function(p){ return p.id === pid; });
+  var updates = {};
+  if(name !== orig.name) updates.name = name;
+  if(skill && skill !== orig.skill) updates.skill = skill;
+  if(can_bowl !== orig.can_bowl) updates.can_bowl = can_bowl;
+
+  if(!Object.keys(updates).length){
+    _editingPlayerId = null;
+    renderPlayers();
+    return;
+  }
+
+  loading(true);
+  try {
+    var updated = await api('PATCH', '/sessions/' + currentSessionId + '/players/' + pid, updates);
+    var idx = players.findIndex(function(p){ return p.id === pid; });
+    if(idx !== -1) players[idx] = updated;
+    _editingPlayerId = null;
+    renderPlayers();
+    toast('Player updated!');
+  } catch(e){
+    toast(e.message || 'Failed to update player.', true);
+  } finally {
+    loading(false);
+  }
+}
+
+function toggleEditBowl(pid){
+  var btn = document.getElementById('edit-bowl-' + pid);
+  if(btn) btn.classList.toggle('on');
+}
+
+function setEditSkill(pid, skill){
+  var btns = document.querySelectorAll('#edit-skill-' + pid + ' button');
+  btns.forEach(function(b){ b.classList.remove('on'); });
+  var target = document.querySelector('#edit-skill-' + pid + ' button[data-skill="' + skill + '"]');
+  if(target) target.classList.add('on');
+}
+
+function renderPlayers(){
+  var list  = document.getElementById('plist');
+  var empty = document.getElementById('emptyMsg');
+  var count = document.getElementById('pcount');
+  var warn  = document.getElementById('warnMsg');
+  var btn   = document.getElementById('genBtn');
+  var noSes = document.getElementById('noSessionInfo');
+
+  if(!currentSessionId){
+    list.innerHTML = ''; empty.style.display = 'block'; count.textContent = '';
+    warn.style.display = 'none'; btn.disabled = true;
+    noSes.style.display = 'block';
+    document.getElementById('playerForm').style.display = 'none';
+    return;
+  }
+  noSes.style.display = 'none';
+  document.getElementById('playerForm').style.display = '';
+
+  if(players.length === 0){
+    list.innerHTML = ''; empty.style.display = 'block'; count.textContent = '';
+    warn.style.display = 'none'; btn.disabled = true; return;
+  }
+  empty.style.display = 'none';
+
+  var html = '';
+  players.forEach(function(p){
+    var isEditing = (_editingPlayerId === p.id);
+    if(isEditing){
+      var skMap = {beginner:'b', intermediate:'m', expert:'e'};
+      html += '<div class="ptag editing" id="ptag-' + p.id + '">'
+        + '<div class="edit-row">'
+        + '<input class="edit-name-input" id="edit-name-' + p.id + '" value="' + esc(p.name) + '" maxlength="30" onkeydown="if(event.key===\'Enter\')savePlayerEdit(\'' + p.id + '\');else if(event.key===\'Escape\')cancelPlayerEdit()">'
+        + '</div>'
+        + '<div class="edit-row">'
+        + '<div class="edit-skill-pills" id="edit-skill-' + p.id + '">'
+        + ['beginner','intermediate','expert'].map(function(s){
+            var cls = 'edit-skill-pills button' + (p.skill===s?' on '+skMap[s]:'');
+            return '<button class="' + (p.skill===s?'on '+skMap[s]:'') + '" data-skill="' + s + '" onclick="setEditSkill(\'' + p.id + '\',\'' + s + '\')">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>';
+          }).join('')
+        + '</div>'
+        + '<button class="edit-bowl-btn' + (p.can_bowl?' on':'') + '" id="edit-bowl-' + p.id + '" onclick="toggleEditBowl(\'' + p.id + '\')">'
+        + (p.can_bowl ? '🏏 Bowl' : '🏏 Bowl?') + '</button>'
+        + '</div>'
+        + '<div class="edit-actions">'
+        + '<button class="btn-cancel-sm" onclick="cancelPlayerEdit()">Cancel</button>'
+        + '<button class="btn-save-sm" onclick="savePlayerEdit(\'' + p.id + '\')">Save</button>'
+        + '</div>'
+        + '</div>';
+    } else {
+      var roleLabel = p.can_bowl ? 'Bat &amp; Bowl' : 'Bat';
+      html += '<div class="ptag" id="ptag-' + p.id + '">'
+        + '<div class="pleft"><span class="pname">' + esc(p.name) + '</span>'
+        + '<span class="sbadge sb-' + p.skill + '">' + p.skill + '</span>'
+        + '<span class="sbadge" style="background:rgba(253,246,227,.07);color:var(--muted);border:1px solid var(--cb);font-size:.5rem">' + roleLabel + '</span>'
+        + '</div>'
+        + '<button class="btnedit" onclick="editPlayer(\'' + p.id + '\')">✎</button>'
+        + '<button class="btnrm" onclick="removePlayer(\'' + p.id + '\')">✕</button>'
+        + '</div>';
+    }
+  });
+  list.innerHTML = html;
+
+  var b=0, m=0, e=0;
+  players.forEach(function(p){
+    if(p.skill==='beginner') b++;
+    else if(p.skill==='intermediate') m++;
+    else e++;
+  });
+  count.textContent = players.length + ' player' + (players.length!==1?'s':'')
+    + ' · ' + b + ' beg · ' + m + ' int · ' + e + ' exp';
+
+  btn.disabled = players.length < 2;
+
+  var viewBtn = document.getElementById('viewTeamsBtn');
+  if(teamsData && players.length >= 2){
+    viewBtn.style.display = '';
+  } else {
+    viewBtn.style.display = 'none';
+  }
+
+  if(players.length === 1){
+    warn.textContent = 'Add at least 2 players to generate teams.';
+    warn.style.display = 'block';
+  } else if(players.length % 2 !== 0){
+    warn.textContent = '⚠️ Odd number (' + players.length + '): one team gets an extra player.';
+    warn.style.display = 'block';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+// ─── Teams ────────────────────────────────────────────────────────────────────
+function openGenerateModal(){
+  document.getElementById('teamAName').value = '';
+  document.getElementById('teamBName').value = '';
+  openModal('generateModal');
+}
+
+async function makeTeams(){
+  if(!currentSessionId || players.length < 2) return;
+  var aName = document.getElementById('teamAName').value.trim() || 'Team A';
+  var bName = document.getElementById('teamBName').value.trim() || 'Team B';
+  closeModal('generateModal');
+  loading(true);
+  try {
+    teamsData = await api('POST', '/sessions/' + currentSessionId + '/teams/generate', { team_a_name: aName, team_b_name: bName });
+    renderTeams();
+    renderPlayers(); // refresh "View Teams" button visibility
+    goTo(2);
+  } catch(e){
+    toast('Failed: ' + e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+async function reshuffle(){
+  if(!teamsData) return;
+  loading(true);
+  try {
+    var aName = teamsData.team_a_name;
+    var bName = teamsData.team_b_name;
+    teamsData = await api('POST', '/sessions/' + currentSessionId + '/teams/generate', { team_a_name: aName, team_b_name: bName });
+    // Close add-player panel on reshuffle since teams change completely
+    document.getElementById('addPlayerForm').classList.add('hidden');
+    document.getElementById('addPlayerToggle').classList.remove('open');
+    renderTeams();
+    toast('Teams reshuffled!');
+  } catch(e){
+    toast('Failed: ' + e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+function renderTeams(){
+  if(!teamsData) return;
+  var aName = teamsData.team_a_name;
+  var bName = teamsData.team_b_name;
+  var teamA = teamsData.assignments.filter(function(a){ return a.team_name === aName; });
+  var teamB = teamsData.assignments.filter(function(a){ return a.team_name === bName; });
+
+  function teamHTML(team, cls, emoji, label){
+    var capRow = team.find(function(p){ return p.is_captain; });
+    var rows = team.map(function(p){
+      return '<div class="trow' + (p.is_captain?' cap':'') + '">'
+        + (p.is_captain ? '<span>👑</span>' : '<span style="width:1.1em;display:inline-block"></span>')
+        + '<span style="flex:1">' + esc(p.player_name) + '</span>'
+        + (p.can_bowl ? '<span class="sbadge sb-bowl" style="margin-right:4px">Bowl</span>' : '')
+        + '<span class="sbadge sb-' + p.skill + '">' + p.skill + '</span>'
+        + '</div>';
+    }).join('');
+    return '<div class="tcard ' + cls + '">'
+      + '<div class="thead">'
+      + '<span class="tname">' + emoji + ' ' + esc(label) + '</span>'
+      + (capRow ? '<span class="capbadge">👑 ' + esc(capRow.player_name) + '</span>' : '')
+      + '</div>'
+      + '<div class="tplayers">' + rows + '</div>'
+      + '</div>';
+  }
+
+  document.getElementById('tstack').innerHTML =
+    teamHTML(teamA, 'ta', '🟢', aName) +
+    teamHTML(teamB, 'tb', '🔴', bName);
+
+  // Update the late-player team pick buttons with real names
+  document.getElementById('pickA').textContent = '🟢 ' + aName;
+  document.getElementById('pickB').textContent = '🔴 ' + bName;
+  // Default pick to the smaller team
+  lateTeamPick = teamA.length <= teamB.length ? 'a' : 'b';
+  selectTeamPick(lateTeamPick);
+}
+
+function shareTeams(){
+  if(!teamsData) return;
+  var aName = teamsData.team_a_name;
+  var bName = teamsData.team_b_name;
+  var teamA = teamsData.assignments.filter(function(a){ return a.team_name === aName; });
+  var teamB = teamsData.assignments.filter(function(a){ return a.team_name === bName; });
+
+  function fmt(team, label){
+    return label + ' (' + team.length + ')\n'
+      + team.map(function(p){
+          return (p.is_captain?'👑 ':'   ') + p.player_name + ' [' + p.skill + (p.can_bowl?' · bowl':'') + ']';
+        }).join('\n');
+  }
+
+  var text = '🏏 Cricket Teams\n\n' + fmt(teamA, '🟢 ' + aName) + '\n\n' + fmt(teamB, '🔴 ' + bName);
+  document.getElementById('shareText').textContent = text;
+  openModal('shareModal');
+}
+
+async function copyShare(){
+  var text = document.getElementById('shareText').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Copied to clipboard!');
+    closeModal('shareModal');
+  } catch(e){
+    toast('Copy failed — select text manually', true);
+  }
+}
+
+// ─── Can Bowl toggle (step 1) ────────────────────────────────────────────────
+function toggleBowl(){
+  canBowl = !canBowl;
+  document.getElementById('bowlToggle').classList.toggle('on', canBowl);
+}
+
+// ─── Late-player bowl toggle (step 2) ────────────────────────────────────────
+function toggleLateBowl(){
+  lateCanBowl = !lateCanBowl;
+  document.getElementById('lateBowlToggle').classList.toggle('on', lateCanBowl);
+}
+
+// ─── Add-player panel (step 2) ───────────────────────────────────────────────
+function toggleAddPlayerPanel(){
+  var form    = document.getElementById('addPlayerForm');
+  var toggle  = document.getElementById('addPlayerToggle');
+  var isOpen  = !form.classList.contains('hidden');
+  form.classList.toggle('hidden', isOpen);
+  toggle.classList.toggle('open', !isOpen);
+  if(!isOpen) setTimeout(function(){ document.getElementById('latePlayerName').focus(); }, 60);
+}
+
+function setLPill(val){
+  document.querySelectorAll('#addPlayerForm .skill-pills label').forEach(function(l){ l.classList.remove('checked'); });
+  var lbl = document.querySelector('#addPlayerForm .skill-pills label[for="lrb-' + val + '"]');
+  if(lbl) lbl.classList.add('checked');
+}
+
+function getLSkill(){
+  var radios = document.querySelectorAll('input[name="lskill"]');
+  for(var i=0;i<radios.length;i++) if(radios[i].checked) return radios[i].value;
+  return 'intermediate';
+}
+
+function selectTeamPick(side){
+  lateTeamPick = side;
+  document.getElementById('pickA').classList.toggle('sel', side === 'a');
+  document.getElementById('pickB').classList.toggle('sel', side === 'b');
+}
+
+async function addLatePlayer(){
+  if(!currentSessionId || !teamsData) return;
+  var name = document.getElementById('latePlayerName').value.trim();
+  if(!name){ toast('Enter a name first!'); return; }
+  var skill     = getLSkill();
+  var teamName  = lateTeamPick === 'a' ? teamsData.team_a_name : teamsData.team_b_name;
+  loading(true);
+  try {
+    teamsData = await api('POST', '/sessions/' + currentSessionId + '/teams/add_player', {
+      name: name, skill: skill, can_bowl: lateCanBowl, team_name: teamName
+    });
+    // Also add to local players list so step 1 stays in sync
+    var pRes = await api('GET', '/sessions/' + currentSessionId + '/players');
+    players = pRes;
+    document.getElementById('latePlayerName').value = '';
+    lateCanBowl = false;
+    document.getElementById('lateBowlToggle').classList.remove('on');
+    renderTeams();
+    toast(name + ' added to ' + teamName + '!');
+  } catch(e){
+    toast(e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+
+// ─── Toss ─────────────────────────────────────────────────────────────────────
+async function tossCoin(){
+  if(tossing || !currentSessionId) return;
+  tossing = true;
+  var coin = document.getElementById('coin');
+  var res  = document.getElementById('tres');
+  var sub  = document.getElementById('tsub');
+  res.classList.remove('show');
+  sub.textContent = '';
+  coin.classList.remove('spin');
+  void coin.offsetWidth;
+  coin.classList.add('spin');
+
+  try {
+    var data = await api('POST', '/sessions/' + currentSessionId + '/toss');
+    tossN = data.toss_number;
+    setTimeout(function(){
+      var out = data.result;
+      res.textContent = out === 'heads' ? '🌟 HEADS' : '🌑 TAILS';
+      res.className = 'tres ' + out + ' show';
+      sub.textContent = out === 'heads' ? 'Bright side up!' : 'Bat first!';
+      var hist = document.getElementById('thist');
+      var row = document.createElement('div');
+      row.className = 'thist-row';
+      row.innerHTML = '<span>Toss #' + tossN + '</span>'
+        + '<span style="color:' + (out==='heads'?'var(--gold)':'#c8a96e') + '">' + out.toUpperCase() + '</span>';
+      hist.insertBefore(row, hist.firstChild);
+      tossing = false;
+    }, 1550);
+  } catch(e){
+    toast('Toss failed: ' + e.message, true);
+    tossing = false;
+  }
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function goTo(n){
+  for(var i=1;i<=3;i++){
+    document.getElementById('sec'+i).classList.toggle('on', i===n);
+    document.getElementById('sn'+i).className = 'snum'+(i===n?' on':i<n?' done':'');
+    document.getElementById('sl'+i).className = 'slabel'+(i===n?' on':'');
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ─── Confirm helpers ──────────────────────────────────────────────────────────
+function confirmNewMatch(){
+  document.getElementById('confirmTitle').textContent = 'New Match?';
+  document.getElementById('confirmMsg').textContent = 'This will clear toss history and take you back to step 1. Players are kept.';
+  document.getElementById('confirmOk').style.background = 'var(--grass)';
+  document.getElementById('confirmOk').textContent = 'Continue';
+  document.getElementById('confirmOk').onclick = function(){
+    closeModal('confirmModal');
+    tossN = 0; tossing = false;
+    document.getElementById('thist').innerHTML = '';
+    document.getElementById('tres').className = 'tres';
+    document.getElementById('tsub').textContent = '';
+    goTo(1);
+  };
+  openModal('confirmModal');
+}
+
+// ─── Skill pills ─────────────────────────────────────────────────────────────
+function setPill(val){
+  document.querySelectorAll('.skill-pills label').forEach(function(l){ l.classList.remove('checked'); });
+  var lbl = document.querySelector('.skill-pills label[for="rb-' + val + '"]');
+  if(lbl) lbl.classList.add('checked');
+}
+
+function getSkill(){
+  var radios = document.querySelectorAll('input[name="skill"]');
+  for(var i=0;i<radios.length;i++) if(radios[i].checked) return radios[i].value;
+  return 'intermediate';
+}
+
+// ─── Modals ───────────────────────────────────────────────────────────────────
+function openNewSessionModal(){
+  document.getElementById('newSessionName').value = '';
+  openModal('newSessionModal');
+  setTimeout(function(){ document.getElementById('newSessionName').focus(); }, 50);
+}
+
+function openRenameModal(){
+  if(!currentSessionId) return;
+  var sel = document.getElementById('sessionSelect');
+  var currentName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+  var inp = document.getElementById('renameSessionName');
+  inp.value = currentName;
+  openModal('renameSessionModal');
+  setTimeout(function(){ inp.focus(); inp.select(); }, 50);
+}
+
+async function renameSession(){
+  var name = document.getElementById('renameSessionName').value.trim();
+  if(!name) return;
+  closeModal('renameSessionModal');
+  loading(true);
+  try {
+    var updated = await api('PATCH', '/sessions/' + currentSessionId, { name: name });
+    // update the dropdown option text in place
+    var sel = document.getElementById('sessionSelect');
+    for(var i = 0; i < sel.options.length; i++){
+      if(sel.options[i].value === currentSessionId){
+        sel.options[i].text = updated.name;
+        break;
+      }
+    }
+    toast('Match renamed!');
+  } catch(e){
+    toast('Failed to rename: ' + e.message, true);
+  } finally {
+    loading(false);
+  }
+}
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-bg').forEach(function(bg){
+  bg.addEventListener('click', function(e){ if(e.target === bg) bg.classList.remove('open'); });
+});
+
+// ─── Misc ─────────────────────────────────────────────────────────────────────
+var toastTimer;
+function toast(msg, isError){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2500);
+}
+
+function loading(on){ document.getElementById('loader').classList.toggle('on', on); }
+
+function esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso){
+  var d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+}
+
+// ─── Service Worker ───────────────────────────────────────────────────────────
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/static/sw.js').catch(function(e){ console.warn('SW:', e); });
+}
+</script>
+</body>
+</html>

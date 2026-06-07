@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080f14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Profile — Cricket Team Maker</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --grass:#2d6a4f;--grass-l:#40916c;--sky:#080f14;--cream:#fdf6e3;
+  --gold:#f4c842;--red:#c62a2a;--muted:rgba(253,246,227,.45);
+  --cb:rgba(255,255,255,.09);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  background:var(--sky);color:var(--cream);font-family:'DM Sans',sans-serif;
+  min-height:100vh;
+  background-image:
+    radial-gradient(ellipse 90% 40% at 50% -5%,rgba(45,106,79,.38) 0%,transparent 65%),
+    radial-gradient(ellipse 50% 40% at 100% 100%,rgba(244,200,66,.05) 0%,transparent 55%);
+}
+.wrap{max-width:560px;margin:0 auto;padding:24px 14px calc(60px + var(--safe-bottom))}
+
+/* HEADER */
+header{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+.back-btn{background:transparent;border:1px solid var(--cb);color:var(--muted);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;text-decoration:none}
+.back-btn:hover{border-color:var(--gold);color:var(--gold)}
+.header-title{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:900}
+.header-title em{color:var(--gold);font-style:normal}
+
+/* AVATAR BLOCK */
+.avatar-block{display:flex;align-items:center;gap:16px;margin-bottom:28px;padding:18px;background:rgba(255,255,255,.04);border:1px solid var(--cb);border-radius:18px}
+.avatar-lg{width:56px;height:56px;border-radius:50%;background:var(--grass);display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;flex-shrink:0;color:var(--cream);border:2px solid var(--grass-l)}
+.avatar-info{min-width:0}
+.avatar-name{font-size:1.05rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.avatar-email{font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* SIGN-IN GATE */
+#guestGate{text-align:center;padding:60px 20px}
+#guestGate p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.8rem;letter-spacing:.5px;margin-bottom:20px}
+
+/* TABS */
+.tabs{display:flex;gap:0;margin-bottom:20px;border-radius:12px;overflow:hidden;border:1px solid var(--cb)}
+.tab-btn{flex:1;padding:11px 6px;background:transparent;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:.8px;cursor:pointer;transition:all .15s;text-transform:uppercase}
+.tab-btn.on{background:var(--gold);color:var(--sky);font-weight:700}
+
+/* SECTIONS */
+.tab-sec{display:none}.tab-sec.on{display:block}
+
+/* CARD */
+.card{background:rgba(255,255,255,.04);border:1px solid var(--cb);border-radius:18px;padding:18px 14px;margin-bottom:14px}
+.ctitle{font-family:'Playfair Display',serif;font-size:1rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.tag{font-family:'DM Mono',monospace;font-size:.58rem;background:var(--grass);color:var(--gold);padding:3px 7px;border-radius:4px;letter-spacing:.8px}
+.hr{height:1px;background:var(--cb);margin:14px 0}
+.field-label{font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:block}
+.finput{display:block;width:100%;background:rgba(253,246,227,.07);border:1.5px solid rgba(253,246,227,.14);border-radius:12px;padding:13px 14px;color:var(--cream);font-family:'DM Sans',sans-serif;font-size:.95rem;outline:none;transition:border-color .2s,box-shadow .2s}
+.finput:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(244,200,66,.12)}
+.finput::placeholder{color:rgba(253,246,227,.28)}
+.form-row{margin-bottom:12px}
+.btn-save{padding:12px 20px;background:var(--gold);color:var(--sky);border:none;border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem;font-weight:700;letter-spacing:.8px;transition:all .15s}
+.btn-save:active{opacity:.85;transform:scale(.98)}
+.btn-save:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-danger{padding:12px 20px;background:transparent;color:#f08080;border:1px solid rgba(198,42,42,.5);border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem;letter-spacing:.8px;transition:all .15s}
+.btn-danger:hover{background:rgba(198,42,42,.12);border-color:#f08080}
+.feedback{border-radius:8px;padding:9px 12px;font-size:.76rem;margin-top:10px;display:none}
+.feedback.ok{background:rgba(45,106,79,.12);border:1px solid rgba(64,145,108,.4);color:#74d494}
+.feedback.err{background:rgba(198,42,42,.1);border:1px solid rgba(198,42,42,.3);color:#f08080}
+
+/* HISTORY */
+.match-card{background:rgba(255,255,255,.04);border:1px solid var(--cb);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.match-header{padding:12px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;transition:background .15s}
+.match-header:hover{background:rgba(255,255,255,.03)}
+.match-meta{min-width:0}
+.match-name{font-size:.95rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.match-date{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:2px}
+.match-badges{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.mbadge{font-family:'DM Mono',monospace;font-size:.58rem;padding:3px 7px;border-radius:4px;letter-spacing:.6px}
+.mbadge-toss{background:rgba(244,200,66,.12);color:var(--gold);border:1px solid rgba(244,200,66,.3)}
+.mbadge-players{background:rgba(45,106,79,.2);color:#74d494;border:1px solid rgba(45,106,79,.35)}
+.match-chevron{font-size:.7rem;color:var(--muted);transition:transform .2s;flex-shrink:0}
+.match-card.open .match-chevron{transform:rotate(180deg)}
+.match-body{display:none;padding:0 14px 14px}
+.match-card.open .match-body{display:block}
+.teams-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.team-col{background:rgba(0,0,0,.18);border-radius:10px;overflow:hidden}
+.team-col-head{padding:8px 10px;font-family:'Playfair Display',serif;font-size:.88rem;font-weight:700}
+.team-col-head.ta{background:rgba(45,106,79,.35)}
+.team-col-head.tb{background:rgba(198,42,42,.25)}
+.team-player{display:flex;align-items:center;gap:5px;padding:6px 10px;font-size:.8rem;border-top:1px solid rgba(255,255,255,.05)}
+.team-player.cap{font-weight:600}
+.sbadge{font-family:'DM Mono',monospace;font-size:.52rem;letter-spacing:.6px;padding:2px 5px;border-radius:3px}
+.sb-beginner{background:rgba(74,144,226,.18);color:#74b2f5;border:1px solid rgba(74,144,226,.3)}
+.sb-intermediate{background:rgba(244,200,66,.14);color:var(--gold);border:1px solid rgba(244,200,66,.3)}
+.sb-expert{background:rgba(45,106,79,.28);color:#74d494;border:1px solid rgba(45,106,79,.4)}
+.sb-bowl{background:rgba(45,106,79,.22);color:#74d494;border:1px solid rgba(45,106,79,.4)}
+.toss-log{margin-top:10px}
+.toss-log-title{font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.toss-chips{display:flex;flex-wrap:wrap;gap:5px}
+.toss-chip{font-family:'DM Mono',monospace;font-size:.62rem;padding:3px 8px;border-radius:100px}
+.toss-chip.heads{background:rgba(244,200,66,.12);color:var(--gold);border:1px solid rgba(244,200,66,.3)}
+.toss-chip.tails{background:rgba(200,169,110,.1);color:#c8a96e;border:1px solid rgba(200,169,110,.3)}
+.no-teams{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);padding:10px 0}
+
+/* STATS TABLE */
+.stats-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.stats-table th{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--cb)}
+.stats-table td{padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.04)}
+.stats-table tr:last-child td{border-bottom:none}
+.stats-rank{font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);width:28px}
+.stat-num{font-family:'DM Mono',monospace;font-size:.78rem;color:var(--gold)}
+
+/* EMPTY / LOADING */
+.empty-state{text-align:center;padding:40px 0;color:var(--muted);font-family:'DM Mono',monospace;font-size:.75rem;letter-spacing:.5px}
+.spin-inline{display:inline-block;width:14px;height:14px;border:2px solid rgba(253,246,227,.3);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{background:#0d1f2d;border:1px solid var(--cb);border-radius:20px;padding:22px 18px;width:100%;max-width:360px;animation:slideup .25s ease}
+@keyframes slideup{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal h2{font-family:'Playfair Display',serif;font-size:1.15rem;margin-bottom:10px}
+.modal p{color:var(--muted);font-size:.84rem;margin-bottom:16px;line-height:1.5}
+.modal-actions{display:flex;gap:8px;margin-top:4px}
+.btn-cancel{flex:1;padding:12px;background:transparent;border:1px solid var(--cb);color:var(--muted);border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem}
+.btn-confirm{flex:1;padding:12px;background:var(--gold);color:var(--sky);border:none;border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem;font-weight:700}
+.btn-confirm:disabled{opacity:.5;cursor:not-allowed}
+.btn-confirm-del{flex:1;padding:12px;background:var(--red);color:#fff;border:none;border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem;font-weight:700}
+
+/* TOAST */
+.toast{position:fixed;bottom:calc(24px + var(--safe-bottom));left:50%;transform:translateX(-50%) translateY(80px);background:rgba(30,80,55,.96);color:var(--cream);padding:11px 22px;border-radius:100px;font-size:.78rem;font-family:'DM Mono',monospace;letter-spacing:.8px;transition:transform .35s cubic-bezier(.34,1.56,.64,1);z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.error{background:rgba(140,20,20,.96)}
+
+/* LOADING OVERLAY */
+.loading-overlay{position:fixed;inset:0;background:rgba(8,15,20,.8);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.loading-overlay.on{opacity:1;pointer-events:all}
+.spinner{width:44px;height:44px;border:3px solid rgba(244,200,66,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header>
+    <a class="back-btn" href="/" title="Back to app">←</a>
+    <div>
+      <div class="header-title">My <em>Profile</em></div>
+    </div>
+  </header>
+
+  <!-- GUEST GATE -->
+  <div id="guestGate" style="display:none">
+    <span style="font-size:3rem">🏏</span>
+    <p style="margin-top:16px">Sign in to view your profile, match history, and player stats.</p>
+    <button class="btn-save" onclick="window.location='/'">Go to App →</button>
+  </div>
+
+  <!-- SIGNED IN CONTENT -->
+  <div id="profileContent" style="display:none">
+
+    <!-- AVATAR -->
+    <div class="avatar-block">
+      <div class="avatar-lg" id="avatarLg">?</div>
+      <div class="avatar-info">
+        <div class="avatar-name" id="avatarName">Loading…</div>
+        <div class="avatar-email" id="avatarEmail"></div>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab-btn on" onclick="switchTab('account')">Account</button>
+      <button class="tab-btn" onclick="switchTab('history')">History</button>
+      <button class="tab-btn" onclick="switchTab('stats')">Stats</button>
+    </div>
+
+    <!-- ── TAB: ACCOUNT ── -->
+    <div class="tab-sec on" id="tabAccount">
+
+      <!-- Display name -->
+      <div class="card">
+        <div class="ctitle">Display Name <span class="tag">PROFILE</span></div>
+        <div class="form-row">
+          <label class="field-label" for="inputDisplayName">Name shown in the app</label>
+          <input class="finput" id="inputDisplayName" type="text" maxlength="40" placeholder="e.g. Rohit" autocomplete="off">
+        </div>
+        <button class="btn-save" onclick="saveDisplayName()">Save Name</button>
+        <div class="feedback" id="fbDisplayName"></div>
+      </div>
+
+      <!-- Change email -->
+      <div class="card">
+        <div class="ctitle">Email Address <span class="tag">AUTH</span></div>
+        <div class="form-row">
+          <label class="field-label" for="inputEmail">New email address</label>
+          <input class="finput" id="inputEmail" type="email" placeholder="new@example.com" autocomplete="email">
+        </div>
+        <button class="btn-save" onclick="saveEmail()">Update Email</button>
+        <div class="feedback" id="fbEmail"></div>
+      </div>
+
+      <!-- Change password -->
+      <div class="card">
+        <div class="ctitle">Password <span class="tag">AUTH</span></div>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Update your account password. You'll need your current password to confirm.</p>
+        <button class="btn-save" onclick="openPasswordModal()">Change Password</button>
+        <div class="feedback" id="fbPassword"></div>
+      </div>
+
+      <!-- Danger zone -->
+      <div class="card">
+        <div class="ctitle" style="color:#f08080">Danger Zone</div>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Permanently delete your account and all match sessions. This cannot be undone.</p>
+        <button class="btn-danger" onclick="openDeleteModal()">Delete Account</button>
+      </div>
+
+    </div><!-- /tabAccount -->
+
+    <!-- ── TAB: HISTORY ── -->
+    <div class="tab-sec" id="tabHistory">
+      <div id="historyList"><div class="empty-state">Loading…</div></div>
+    </div>
+
+    <!-- ── TAB: STATS ── -->
+    <div class="tab-sec" id="tabStats">
+      <div class="card">
+        <div class="ctitle">Player Stats <span class="tag">ALL MATCHES</span></div>
+        <div id="statsContent"><div class="empty-state">Loading…</div></div>
+      </div>
+    </div>
+
+  </div><!-- /profileContent -->
+
+</div><!-- /wrap -->
+
+<!-- CHANGE PASSWORD MODAL -->
+<div class="modal-bg" id="passwordModal">
+  <div class="modal">
+    <h2>Change Password</h2>
+    <div class="auth-error" id="pwModalError" style="display:none;margin-bottom:10px;color:#f08080;font-size:.8rem;padding:8px 10px;background:rgba(240,128,128,.1);border-radius:8px"></div>
+    <div class="form-row" style="margin-bottom:10px">
+      <label class="field-label" for="inputPwCurrent">Current password</label>
+      <input class="finput" id="inputPwCurrent" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <div class="form-row" style="margin-bottom:10px">
+      <label class="field-label" for="inputPwNew">New password (min 6 chars)</label>
+      <input class="finput" id="inputPwNew" type="password" placeholder="••••••••" autocomplete="new-password">
+    </div>
+    <div class="form-row" style="margin-bottom:4px">
+      <label class="field-label" for="inputPwConfirm">Confirm new password</label>
+      <input class="finput" id="inputPwConfirm" type="password" placeholder="••••••••" autocomplete="new-password">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('passwordModal')">Cancel</button>
+      <button class="btn-confirm" id="pwSaveBtn" onclick="savePassword()">Update</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-bg" id="deleteModal">
+  <div class="modal">
+    <h2>Delete Account?</h2>
+    <p>All your match sessions, players, teams, and toss history will be permanently deleted. You cannot undo this.</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-confirm-del" onclick="confirmDeleteAccount()">Yes, Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loader"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+var SUPA_URL  = '{{ supabase_url }}';
+var SUPA_ANON = '{{ supabase_anon_key }}';
+var supaAuth  = null;
+var currentUser = null;
+var historyLoaded = false;
+var statsLoaded   = false;
+
+if(SUPA_URL && SUPA_ANON && !SUPA_ANON.startsWith('your-')){
+  try {
+    supaAuth = (window.supabase || window.supabase_js).createClient(SUPA_URL, SUPA_ANON);
+  } catch(e){ console.warn('Supabase init failed:', e); }
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+(async function boot(){
+  if(!supaAuth){
+    showGuestGate();
+    return;
+  }
+
+  try {
+    var result = await supaAuth.auth.getSession();
+    var session = result.data && result.data.session;
+    if(!session){
+      showGuestGate();
+      return;
+    }
+    currentUser = session.user;
+  } catch(e){
+    console.error('getSession failed:', e);
+    showGuestGate();
+    return;
+  }
+
+  showProfile();
+  loadDisplayName();
+  loadHistory();
+  loadStats();
+})();
+
+function showGuestGate(){
+  document.getElementById('guestGate').style.display = '';
+}
+
+function showProfile(){
+  document.getElementById('profileContent').style.display = '';
+  var email = currentUser.email || '';
+  document.getElementById('avatarEmail').textContent = email;
+  // avatar/name updated by loadDisplayName(); set placeholder from email for now
+  var fallback = email.split('@')[0] || 'User';
+  document.getElementById('avatarLg').textContent  = fallback.charAt(0).toUpperCase();
+  document.getElementById('avatarName').textContent = fallback;
+}
+
+async function loadDisplayName(){
+  try {
+    var res = await apiProfile('GET', '/display_name');
+    var name = res.display_name || '';
+    if(name){
+      document.getElementById('avatarLg').textContent  = name.charAt(0).toUpperCase();
+      document.getElementById('avatarName').textContent = name;
+      document.getElementById('inputDisplayName').value = name;
+    }
+  } catch(e){ /* non-fatal */ }
+}
+
+// ─── API helper ───────────────────────────────────────────────────────────────
+async function apiProfile(method, path, body){
+  // Use the already-resolved currentUser's token; fall back to a fresh getSession
+  var token = null;
+  if(supaAuth){
+    var { data: { session } } = await supaAuth.auth.getSession();
+    token = session ? session.access_token : null;
+  }
+  var headers = { 'Content-Type': 'application/json' };
+  if(token) headers['Authorization'] = 'Bearer ' + token;
+  var opts = { method: method, headers: headers };
+  if(body) opts.body = JSON.stringify(body);
+
+  // Abort after 15 s so we never spin forever
+  var controller = new AbortController();
+  var timer = setTimeout(function(){ controller.abort(); }, 15000);
+  opts.signal = controller.signal;
+
+  try {
+    var r = await fetch('/api/profile' + path, opts);
+    clearTimeout(timer);
+    if(!r.ok){
+      var err = await r.json().catch(function(){ return { detail: r.statusText }; });
+      throw new Error(err.detail || r.statusText);
+    }
+    if(r.status === 204) return null;
+    return r.json();
+  } catch(e) {
+    clearTimeout(timer);
+    if(e.name === 'AbortError') throw new Error('Request timed out');
+    throw e;
+  }
+}
+
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+var currentTab = 'account';
+function switchTab(name){
+  currentTab = name;
+  document.querySelectorAll('.tab-btn').forEach(function(b,i){
+    var names = ['account','history','stats'];
+    b.classList.toggle('on', names[i] === name);
+  });
+  document.querySelectorAll('.tab-sec').forEach(function(s){
+    s.classList.remove('on');
+  });
+  document.getElementById('tab' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('on');
+}
+
+// ─── Account: display name ────────────────────────────────────────────────────
+async function saveDisplayName(){
+  var val = document.getElementById('inputDisplayName').value.trim();
+  if(!val){ showFb('fbDisplayName','Name cannot be empty.','err'); return; }
+  loading(true);
+  try {
+    await apiProfile('PATCH', '/display_name', { display_name: val });
+    document.getElementById('avatarLg').textContent  = val.charAt(0).toUpperCase();
+    document.getElementById('avatarName').textContent = val;
+    showFb('fbDisplayName','Display name updated!','ok');
+    toast('Name saved!');
+  } catch(e){
+    showFb('fbDisplayName', e.message, 'err');
+  } finally { loading(false); }
+}
+
+// ─── Account: email ────────────────────────────────────────────────────────────
+async function saveEmail(){
+  var val = document.getElementById('inputEmail').value.trim();
+  if(!val){ showFb('fbEmail','Enter a new email.','err'); return; }
+  loading(true);
+  try {
+    var { error } = await supaAuth.auth.updateUser({ email: val });
+    if(error) throw error;
+    showFb('fbEmail', 'Check your new inbox to confirm the change.', 'ok');
+    document.getElementById('inputEmail').value = '';
+  } catch(e){
+    showFb('fbEmail', e.message || 'Failed to update email.', 'err');
+  } finally { loading(false); }
+}
+
+// ─── Account: password ────────────────────────────────────────────────────────
+function openPasswordModal(){
+  document.getElementById('inputPwCurrent').value = '';
+  document.getElementById('inputPwNew').value = '';
+  document.getElementById('inputPwConfirm').value = '';
+  document.getElementById('pwModalError').style.display = 'none';
+  document.getElementById('pwSaveBtn').disabled = false;
+  openModal('passwordModal');
+  setTimeout(function(){ document.getElementById('inputPwCurrent').focus(); }, 80);
+}
+
+async function savePassword(){
+  var current = document.getElementById('inputPwCurrent').value;
+  var newPw   = document.getElementById('inputPwNew').value;
+  var confirm = document.getElementById('inputPwConfirm').value;
+  var errEl   = document.getElementById('pwModalError');
+
+  function pwErr(msg){ errEl.textContent = msg; errEl.style.display = 'block'; }
+
+  if(!current){ pwErr('Please enter your current password.'); return; }
+  if(newPw.length < 6){ pwErr('New password must be at least 6 characters.'); return; }
+  if(newPw !== confirm){ pwErr('Passwords do not match.'); return; }
+
+  var btn = document.getElementById('pwSaveBtn');
+  btn.disabled = true;
+  errEl.style.display = 'none';
+
+  try {
+    // Re-authenticate with current password first
+    var { error: signInErr } = await supaAuth.auth.signInWithPassword({
+      email: currentUser.email,
+      password: current,
+    });
+    if(signInErr) throw new Error('Current password is incorrect.');
+
+    var { error } = await supaAuth.auth.updateUser({ password: newPw });
+    if(error) throw error;
+
+    closeModal('passwordModal');
+    showFb('fbPassword', 'Password updated successfully.', 'ok');
+  } catch(e){
+    pwErr(e.message || 'Failed to update password.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─── Delete account ────────────────────────────────────────────────────────────
+function openDeleteModal(){ openModal('deleteModal'); }
+
+async function confirmDeleteAccount(){
+  closeModal('deleteModal');
+  loading(true);
+  try {
+    await apiProfile('DELETE', '');
+    await supaAuth.auth.signOut();
+    toast('Account deleted. Goodbye!');
+    setTimeout(function(){ window.location = '/'; }, 1800);
+  } catch(e){
+    toast('Delete failed: ' + e.message, true);
+  } finally { loading(false); }
+}
+
+// ─── History ──────────────────────────────────────────────────────────────────
+async function loadHistory(){
+  try {
+    var history = await apiProfile('GET', '/history');
+    renderHistory(history);
+  } catch(e){
+    document.getElementById('historyList').innerHTML =
+      '<div class="empty-state">Failed to load history: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderHistory(history){
+  var el = document.getElementById('historyList');
+  if(!history.length){
+    el.innerHTML = '<div class="empty-state">No matches yet — go play some cricket!</div>';
+    return;
+  }
+
+  var html = '';
+  history.forEach(function(match, idx){
+    var playerCount = match.players.length;
+    var tossCount   = match.toss_history.length;
+    var dateStr     = fmtDate(match.created_at);
+
+    // Toss winner summary (last toss)
+    var lastToss = match.toss_history.length ? match.toss_history[match.toss_history.length - 1].result : null;
+
+    html += '<div class="match-card" id="mc-' + idx + '">';
+    html += '<div class="match-header" onclick="toggleMatch(' + idx + ')">';
+    html += '<div class="match-meta">';
+    html += '<div class="match-name">' + esc(match.name) + '</div>';
+    html += '<div class="match-date">' + dateStr + '</div>';
+    html += '</div>';
+    html += '<div class="match-badges">';
+    if(playerCount) html += '<span class="mbadge mbadge-players">' + playerCount + ' players</span>';
+    if(tossCount)   html += '<span class="mbadge mbadge-toss">🪙 ' + tossCount + ' toss' + (tossCount>1?'es':'') + '</span>';
+    html += '</div>';
+    html += '<span class="match-chevron">▼</span>';
+    html += '</div>';
+
+    // Body
+    html += '<div class="match-body">';
+
+    if(match.team_a_name && match.team_b_name && playerCount > 0){
+      var teamA = match.players.filter(function(p){ return p.team_name === match.team_a_name; });
+      var teamB = match.players.filter(function(p){ return p.team_name === match.team_b_name; });
+
+      html += '<div class="teams-grid">';
+      html += teamColHTML(teamA, match.team_a_name, 'ta');
+      html += teamColHTML(teamB, match.team_b_name, 'tb');
+      html += '</div>';
+    } else if(playerCount > 0){
+      html += '<div class="no-teams">Players added but teams not generated.</div>';
+    } else {
+      html += '<div class="no-teams">No players in this session.</div>';
+    }
+
+    if(tossCount > 0){
+      html += '<div class="toss-log">';
+      html += '<div class="toss-log-title">Toss History</div>';
+      html += '<div class="toss-chips">';
+      match.toss_history.forEach(function(t, ti){
+        html += '<span class="toss-chip ' + t.result + '">#' + (ti+1) + ' ' + t.result.toUpperCase() + '</span>';
+      });
+      html += '</div></div>';
+    }
+
+    html += '</div>'; // match-body
+    html += '</div>'; // match-card
+  });
+
+  el.innerHTML = html;
+}
+
+function teamColHTML(players, name, cls){
+  var rows = players.map(function(p){
+    return '<div class="team-player' + (p.is_captain?' cap':'') + '">'
+      + (p.is_captain ? '<span>👑</span>' : '<span style="width:1.1em;display:inline-block"></span>')
+      + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.name) + '</span>'
+      + (p.can_bowl ? '<span class="sbadge sb-bowl" style="margin-right:2px">Bowl</span>' : '')
+      + '<span class="sbadge sb-' + p.skill + '">' + p.skill.slice(0,3) + '</span>'
+      + '</div>';
+  }).join('');
+  return '<div class="team-col">'
+    + '<div class="team-col-head ' + cls + '">' + esc(name) + '</div>'
+    + rows
+    + '</div>';
+}
+
+function toggleMatch(idx){
+  var card = document.getElementById('mc-' + idx);
+  card.classList.toggle('open');
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+async function loadStats(){
+  try {
+    var stats = await apiProfile('GET', '/stats');
+    renderStats(stats);
+  } catch(e){
+    document.getElementById('statsContent').innerHTML =
+      '<div class="empty-state">Failed to load stats: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderStats(stats){
+  var el = document.getElementById('statsContent');
+  if(!stats.length){
+    el.innerHTML = '<div class="empty-state">No player data yet.</div>';
+    return;
+  }
+
+  var rows = stats.map(function(p, i){
+    var medals = ['🥇','🥈','🥉'];
+    var rank = i < 3 ? medals[i] : (i+1);
+    return '<tr>'
+      + '<td class="stats-rank">' + rank + '</td>'
+      + '<td style="font-weight:500">' + esc(p.name) + '</td>'
+      + '<td class="stat-num" style="text-align:center">' + p.games + '</td>'
+      + '<td class="stat-num" style="text-align:center">' + p.as_captain + '</td>'
+      + '<td class="stat-num" style="text-align:center">' + p.as_bowler + '</td>'
+      + '</tr>';
+  }).join('');
+
+  el.innerHTML = '<table class="stats-table">'
+    + '<thead><tr>'
+    + '<th>#</th><th>Player</th>'
+    + '<th style="text-align:center">Games</th>'
+    + '<th style="text-align:center">Captain</th>'
+    + '<th style="text-align:center">Bowled</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '</table>';
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function showFb(id, msg, type){
+  var el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'feedback ' + type;
+  el.style.display = 'block';
+}
+
+var toastTimer;
+function toast(msg, isError){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2800);
+}
+
+function loading(on){ document.getElementById('loader').classList.toggle('on', on); }
+
+function esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso){
+  var d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+}
+
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-bg').forEach(function(bg){
+  bg.addEventListener('click', function(e){ if(e.target === bg) bg.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
