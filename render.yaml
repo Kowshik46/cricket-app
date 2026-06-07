@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: cricket-team-generator
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/sessions
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
