@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Cricket Team Maker</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --grass: #2d6a4f;
+  --grass-l: #40916c;
+  --sky: #080f14;
+  --cream: #fdf6e3;
+  --gold: #f4c842;
+  --red: #c62a2a;
+  --muted: rgba(253,246,227,0.45);
+  --cb: rgba(255,255,255,0.09);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  background:var(--sky);
+  color:var(--cream);
+  font-family:'DM Sans',sans-serif;
+  min-height:100vh;
+  background-image:
+    radial-gradient(ellipse 90% 40% at 50% -5%, rgba(45,106,79,0.38) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(244,200,66,0.05) 0%, transparent 55%);
+}
+.wrap{max-width:480px;margin:0 auto;padding:24px 14px 60px}
+
+/* HEADER */
+header{text-align:center;margin-bottom:24px}
+.bat{font-size:40px;display:block;margin-bottom:6px;animation:sway 3s ease-in-out infinite}
+@keyframes sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+h1{font-family:'Playfair Display',serif;font-size:clamp(1.8rem,7vw,2.6rem);font-weight:900;line-height:1.1;text-shadow:0 0 32px rgba(244,200,66,.22)}
+h1 em{color:var(--gold);font-style:normal}
+.sub{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:2.5px;text-transform:uppercase;color:var(--muted);margin-top:5px}
+
+/* STEPPER */
+.steps{display:flex;align-items:center;justify-content:center;margin-bottom:20px}
+.sitem{display:flex;align-items:center;gap:5px}
+.snum{width:28px;height:28px;border-radius:50%;border:2px solid rgba(253,246,227,.18);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);transition:all .3s;flex-shrink:0}
+.snum.on{background:var(--gold);border-color:var(--gold);color:var(--sky);font-weight:700;box-shadow:0 0 14px rgba(244,200,66,.4)}
+.snum.done{background:var(--grass);border-color:var(--grass-l);color:var(--cream)}
+.slabel{font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-family:'DM Mono',monospace}
+.slabel.on{color:var(--gold)}
+.sline{width:26px;height:2px;background:rgba(253,246,227,.1);margin:0 5px;flex-shrink:0}
+
+/* CARD */
+.card{background:rgba(255,255,255,.04);border:1px solid var(--cb);border-radius:18px;padding:18px 14px;backdrop-filter:blur(10px)}
+.ctitle{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.tag{font-family:'DM Mono',monospace;font-size:.58rem;background:var(--grass);color:var(--gold);padding:3px 7px;border-radius:4px;letter-spacing:.8px}
+.hr{height:1px;background:var(--cb);margin:16px 0}
+
+/* FORM */
+.finput{
+  display:block;width:100%;
+  background:rgba(253,246,227,.07);
+  border:1.5px solid rgba(253,246,227,.14);
+  border-radius:12px;
+  padding:14px 15px;
+  color:var(--cream);
+  font-family:'DM Sans',sans-serif;
+  font-size:1rem;
+  outline:none;
+  transition:border-color .2s,box-shadow .2s;
+  margin-bottom:10px;
+}
+.finput:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(244,200,66,.12)}
+.finput::placeholder{color:rgba(253,246,227,.28)}
+
+/* SKILL RADIO PILLS */
+.skill-label{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:block}
+.skill-pills{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.skill-pills input[type=radio]{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.skill-pills label{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  padding:12px 6px;border-radius:12px;cursor:pointer;
+  border:2px solid rgba(253,246,227,.13);
+  background:rgba(253,246,227,.04);
+  transition:all .18s;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;-webkit-user-select:none;
+}
+.skill-pills label:active{transform:scale(.96)}
+.skill-pills label .pill-icon{font-size:1.4rem;line-height:1}
+.skill-pills label .pill-name{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);transition:color .18s}
+
+/* Beginner selected */
+.skill-pills input#rb-beginner:checked ~ label[for=rb-beginner],
+.skill-pills label[for=rb-beginner].checked{border-color:rgba(74,144,226,.7);background:rgba(74,144,226,.15);box-shadow:0 0 12px rgba(74,144,226,.2)}
+.skill-pills input#rb-beginner:checked ~ label[for=rb-beginner] .pill-name,
+.skill-pills label[for=rb-beginner].checked .pill-name{color:#74b2f5}
+
+/* Intermediate selected */
+.skill-pills input#rb-intermediate:checked ~ label[for=rb-intermediate],
+.skill-pills label[for=rb-intermediate].checked{border-color:rgba(244,200,66,.7);background:rgba(244,200,66,.13);box-shadow:0 0 12px rgba(244,200,66,.2)}
+.skill-pills input#rb-intermediate:checked ~ label[for=rb-intermediate] .pill-name,
+.skill-pills label[for=rb-intermediate].checked .pill-name{color:var(--gold)}
+
+/* Expert selected */
+.skill-pills input#rb-expert:checked ~ label[for=rb-expert],
+.skill-pills label[for=rb-expert].checked{border-color:rgba(45,106,79,.9);background:rgba(45,106,79,.25);box-shadow:0 0 12px rgba(45,106,79,.3)}
+.skill-pills input#rb-expert:checked ~ label[for=rb-expert] .pill-name,
+.skill-pills label[for=rb-expert].checked .pill-name{color:#74d494}
+
+.btnadd{
+  display:block;width:100%;
+  background:var(--gold);color:var(--sky);
+  border:none;border-radius:12px;
+  padding:14px;
+  font-family:'DM Mono',monospace;font-size:.85rem;font-weight:700;letter-spacing:1.2px;
+  cursor:pointer;transition:all .15s;
+}
+.btnadd:active{transform:scale(.97);opacity:.88}
+
+/* PLAYER LIST */
+.plist{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.ptag{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  background:rgba(253,246,227,.05);border:1px solid rgba(253,246,227,.08);
+  border-radius:10px;padding:11px 12px;
+  animation:pop .25s ease;
+}
+@keyframes pop{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+.pleft{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.pname{font-size:.9rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sbadge{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.8px;text-transform:uppercase;padding:3px 7px;border-radius:4px;flex-shrink:0}
+.sb-beginner{background:rgba(74,144,226,.18);color:#74b2f5;border:1px solid rgba(74,144,226,.3)}
+.sb-intermediate{background:rgba(244,200,66,.14);color:var(--gold);border:1px solid rgba(244,200,66,.3)}
+.sb-expert{background:rgba(45,106,79,.28);color:#74d494;border:1px solid rgba(45,106,79,.4)}
+.btnrm{background:transparent;border:1px solid rgba(198,42,42,.35);color:rgba(230,80,80,.85);padding:7px 11px;font-size:.68rem;border-radius:7px;cursor:pointer;font-family:'DM Mono',monospace;flex-shrink:0;transition:all .15s}
+.btnrm:active{background:rgba(198,42,42,.18)}
+
+.empty{text-align:center;padding:20px 0;color:var(--muted);font-size:.78rem;font-family:'DM Mono',monospace;letter-spacing:.5px}
+.pcount{font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);margin-top:8px;text-align:right}
+.warn{background:rgba(198,42,42,.1);border:1px solid rgba(198,42,42,.3);border-radius:8px;padding:9px 12px;font-size:.76rem;color:#f08080;margin-top:10px}
+
+/* BIG BUTTON */
+.btnprim{
+  display:block;width:100%;
+  padding:15px;background:var(--grass);color:var(--cream);
+  border:1px solid var(--grass-l);border-radius:12px;
+  font-family:'DM Mono',monospace;font-size:.82rem;letter-spacing:1px;text-transform:uppercase;
+  cursor:pointer;transition:all .15s;
+}
+.btnprim:active{background:var(--grass-l);transform:scale(.98)}
+.btnprim:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+/* SECTION */
+.sec{display:none}.sec.on{display:block}
+
+/* TEAM CARDS */
+.tstack{display:flex;flex-direction:column;gap:14px}
+.tcard{border-radius:14px;overflow:hidden;border:1px solid var(--cb)}
+.thead{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px}
+.ta .thead{background:rgba(45,106,79,.42);border-bottom:1px solid rgba(45,106,79,.42)}
+.tb .thead{background:rgba(198,42,42,.3);border-bottom:1px solid rgba(198,42,42,.3)}
+.tname{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700}
+.capbadge{font-family:'DM Mono',monospace;font-size:.58rem;background:var(--gold);color:var(--sky);padding:3px 7px;border-radius:4px;letter-spacing:.8px;font-weight:700}
+.tplayers{padding:10px 14px;display:flex;flex-direction:column;gap:8px;background:rgba(0,0,0,.18)}
+.trow{display:flex;align-items:center;gap:7px;font-size:.87rem}
+.trow.cap{font-weight:600}
+
+/* ACTION ROW */
+.arow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btnout{
+  flex:1;padding:13px 8px;
+  background:transparent;border:1px solid rgba(253,246,227,.18);
+  color:var(--cream);border-radius:10px;
+  font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:.8px;text-transform:uppercase;
+  cursor:pointer;transition:all .15s;text-align:center;
+}
+.btnout:active{background:rgba(253,246,227,.06)}
+.btnout.gold{background:rgba(244,200,66,.08);border-color:rgba(244,200,66,.35);color:var(--gold)}
+
+/* TOSS */
+.toss-wrap{text-align:center;padding:4px 0}
+.coin-outer{perspective:700px;display:inline-block;margin:18px auto;cursor:pointer}
+.coin{width:96px;height:96px;position:relative;transform-style:preserve-3d}
+.coin.spin{animation:cspin 1.5s cubic-bezier(.25,.1,.25,1) forwards}
+@keyframes cspin{0%{transform:rotateY(0)}100%{transform:rotateY(1440deg)}}
+.cface{position:absolute;inset:0;border-radius:50%;display:flex;align-items:center;justify-content:center;backface-visibility:hidden;-webkit-backface-visibility:hidden;border:4px solid rgba(200,169,110,.5);box-shadow:0 0 20px rgba(244,200,66,.15)}
+.chead{background:radial-gradient(circle at 35% 35%,#f9d76b,#c8a96e);color:var(--sky);font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:900}
+.ctail{background:radial-gradient(circle at 35% 35%,#b8946a,#7a5c12);color:var(--cream);transform:rotateY(180deg);font-size:2rem}
+.tres{font-family:'Playfair Display',serif;font-size:1.45rem;font-weight:700;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s;min-height:1.8rem}
+.tres.show{opacity:1;transform:translateY(0)}
+.tres.heads{color:var(--gold)}.tres.tails{color:#c8a96e}
+.tsub{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;min-height:1.1em}
+.thist{margin-top:12px;font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);max-height:80px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.thist-row{display:flex;gap:10px}
+.thist-row span:first-child{opacity:.5}
+.btntoss{display:block;width:100%;padding:15px;background:linear-gradient(135deg,#c8a96e,#f4c842);color:var(--sky);border:none;border-radius:12px;font-family:'DM Mono',monospace;font-size:.82rem;font-weight:700;letter-spacing:1px;cursor:pointer;transition:all .15s}
+.btntoss:active{transform:scale(.97);opacity:.9}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:rgba(30,80,55,.96);color:var(--cream);padding:11px 22px;border-radius:100px;font-size:.78rem;font-family:'DM Mono',monospace;letter-spacing:.8px;transition:transform .35s cubic-bezier(.34,1.56,.64,1);z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="bat">🏏</span>
+    <h1>Cricket <em>Team</em> Maker</h1>
+    <p class="sub">Fair splits · Random captains · Coin toss</p>
+  </header>
+
+  <div class="steps">
+    <div class="sitem"><div class="snum on" id="sn1">1</div><span class="slabel on" id="sl1">Players</span></div>
+    <div class="sline"></div>
+    <div class="sitem"><div class="snum" id="sn2">2</div><span class="slabel" id="sl2">Teams</span></div>
+    <div class="sline"></div>
+    <div class="sitem"><div class="snum" id="sn3">3</div><span class="slabel" id="sl3">Toss</span></div>
+  </div>
+
+  <!-- SEC 1 -->
+  <div class="sec on" id="sec1">
+    <div class="card">
+      <div class="ctitle">Add Players <span class="tag">STEP 1</span></div>
+      <input class="finput" type="text" id="nameInput" placeholder="Player name…" maxlength="30" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false">
+      <span class="skill-label">Skill Level</span>
+      <div class="skill-pills">
+        <input type="radio" name="skill" id="rb-beginner" value="beginner">
+        <label for="rb-beginner" onclick="setPill('beginner')">
+          <span class="pill-icon">🔵</span>
+          <span class="pill-name">Beginner</span>
+        </label>
+
+        <input type="radio" name="skill" id="rb-intermediate" value="intermediate" checked>
+        <label for="rb-intermediate" onclick="setPill('intermediate')">
+          <span class="pill-icon">🟡</span>
+          <span class="pill-name">Inter</span>
+        </label>
+
+        <input type="radio" name="skill" id="rb-expert" value="expert">
+        <label for="rb-expert" onclick="setPill('expert')">
+          <span class="pill-icon">🟢</span>
+          <span class="pill-name">Expert</span>
+        </label>
+      </div>
+      <button class="btnadd" onclick="addPlayer()">+ ADD PLAYER</button>
+
+      <div class="plist" id="plist"></div>
+      <div class="empty" id="emptyMsg">No players yet — add at least 2 to start.</div>
+      <div class="pcount" id="pcount"></div>
+      <div class="warn" id="warnMsg" style="display:none"></div>
+
+      <div class="hr"></div>
+      <button class="btnprim" id="genBtn" onclick="makeTeams()" disabled>⚡ Generate Teams</button>
+    </div>
+  </div>
+
+  <!-- SEC 2 -->
+  <div class="sec" id="sec2">
+    <div class="card">
+      <div class="ctitle">The Teams <span class="tag">STEP 2</span></div>
+      <div class="tstack" id="tstack"></div>
+      <div class="arow">
+        <button class="btnout" onclick="goTo(1)">← Players</button>
+        <button class="btnout" onclick="reshuffle()">🔀 Reshuffle</button>
+        <button class="btnout gold" onclick="goTo(3)">Toss →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEC 3 -->
+  <div class="sec" id="sec3">
+    <div class="card">
+      <div class="ctitle">Coin Toss <span class="tag">STEP 3</span></div>
+      <div class="toss-wrap">
+        <p style="font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">TAP THE COIN TO TOSS</p>
+        <div class="coin-outer" onclick="tossCoin()">
+          <div class="coin" id="coin">
+            <div class="cface chead">H</div>
+            <div class="cface ctail">🏏</div>
+          </div>
+        </div>
+        <div class="tres" id="tres"></div>
+        <div class="tsub" id="tsub"></div>
+        <div class="thist" id="thist"></div>
+      </div>
+      <div class="hr"></div>
+      <button class="btntoss" onclick="tossCoin()">🪙 Toss Again</button>
+      <div class="arow" style="margin-top:10px">
+        <button class="btnout" onclick="goTo(2)">← Teams</button>
+        <button class="btnout" onclick="fresh()">🔄 New Match</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var players = [];
+var teamA = [], teamB = [];
+var tossN = 0, tossing = false;
+
+// highlight selected pill on load
+setPill('intermediate');
+
+document.getElementById('nameInput').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); addPlayer(); }
+});
+
+function setPill(val){
+  var labels = document.querySelectorAll('.skill-pills label');
+  for(var i=0;i<labels.length;i++) labels[i].classList.remove('checked');
+  var lbl = document.querySelector('.skill-pills label[for="rb-'+val+'"]');
+  if(lbl) lbl.classList.add('checked');
+}
+
+function getSkill(){
+  var radios = document.querySelectorAll('input[name="skill"]');
+  for(var i=0;i<radios.length;i++){
+    if(radios[i].checked) return radios[i].value;
+  }
+  return 'intermediate';
+}
+
+function addPlayer(){
+  var name = document.getElementById('nameInput').value.trim();
+  if(!name){ toast('Enter a name first!'); return; }
+  var low = name.toLowerCase();
+  for(var i=0;i<players.length;i++){
+    if(players[i].name.toLowerCase() === low){ toast('Name already added!'); return; }
+  }
+  var skill = getSkill();
+  players.push({ name: name, skill: skill, id: Date.now() });
+  document.getElementById('nameInput').value = '';
+  document.getElementById('nameInput').focus();
+  render();
+  toast(name + ' added!');
+}
+
+function removePlayer(id){
+  players = players.filter(function(p){ return p.id !== id; });
+  render();
+}
+
+function render(){
+  var list  = document.getElementById('plist');
+  var empty = document.getElementById('emptyMsg');
+  var count = document.getElementById('pcount');
+  var warn  = document.getElementById('warnMsg');
+  var btn   = document.getElementById('genBtn');
+
+  if(players.length === 0){
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    count.textContent = '';
+    warn.style.display = 'none';
+    btn.disabled = true;
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  var html = '';
+  for(var i=0;i<players.length;i++){
+    var p = players[i];
+    html += '<div class="ptag">'
+      + '<div class="pleft">'
+      + '<span class="pname">'+esc(p.name)+'</span>'
+      + '<span class="sbadge sb-'+p.skill+'">'+p.skill+'</span>'
+      + '</div>'
+      + '<button class="btnrm" onclick="removePlayer('+p.id+')">✕</button>'
+      + '</div>';
+  }
+  list.innerHTML = html;
+
+  var b=0,m=0,e=0;
+  for(var j=0;j<players.length;j++){
+    if(players[j].skill==='beginner') b++;
+    else if(players[j].skill==='intermediate') m++;
+    else e++;
+  }
+  count.textContent = players.length+' player'+(players.length!==1?'s':'')+' · '+b+' beg · '+m+' int · '+e+' exp';
+
+  btn.disabled = players.length < 2;
+
+  if(players.length === 1){
+    warn.textContent = 'Add at least 2 players to generate teams.';
+    warn.style.display = 'block';
+  } else if(players.length % 2 !== 0){
+    warn.textContent = '⚠️ Odd number ('+players.length+'): one team gets an extra player.';
+    warn.style.display = 'block';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+function makeTeams(){
+  if(players.length < 2) return;
+  var w = { expert:3, intermediate:2, beginner:1 };
+  var sorted = players.slice().sort(function(a,b){ return w[b.skill]-w[a.skill]; });
+  teamA = []; teamB = [];
+  for(var i=0;i<sorted.length;i++){
+    (i%2===0 ? teamA : teamB).push(sorted[i]);
+  }
+  teamA = tierShuffle(teamA);
+  teamB = tierShuffle(teamB);
+  var capA = teamA[Math.floor(Math.random()*teamA.length)];
+  var capB = teamB[Math.floor(Math.random()*teamB.length)];
+  renderTeams(capA, capB);
+  goTo(2);
+}
+
+function reshuffle(){
+  makeTeams();
+  toast('Teams reshuffled!');
+}
+
+function tierShuffle(arr){
+  var g = { expert:[], intermediate:[], beginner:[] };
+  for(var i=0;i<arr.length;i++) g[arr[i].skill].push(arr[i]);
+  var keys = ['expert','intermediate','beginner'];
+  for(var k=0;k<keys.length;k++){
+    var t = g[keys[k]];
+    for(var i=t.length-1;i>0;i--){
+      var j=Math.floor(Math.random()*(i+1)); var tmp=t[i]; t[i]=t[j]; t[j]=tmp;
+    }
+  }
+  return g.expert.concat(g.intermediate).concat(g.beginner);
+}
+
+function renderTeams(capA, capB){
+  function teamHTML(team, cap, cls, emoji, label){
+    var rows = '';
+    for(var i=0;i<team.length;i++){
+      var p=team[i], isCap=(p.id===cap.id);
+      rows += '<div class="trow'+(isCap?' cap':'') +'">'
+        +(isCap?'<span>👑</span>':'<span style="width:1.1em;display:inline-block"></span>')
+        +'<span style="flex:1">'+esc(p.name)+'</span>'
+        +'<span class="sbadge sb-'+p.skill+'">'+p.skill+'</span>'
+        +'</div>';
+    }
+    return '<div class="tcard '+cls+'">'
+      +'<div class="thead">'
+      +'<span class="tname">'+emoji+' '+label+'</span>'
+      +'<span class="capbadge">👑 '+esc(cap.name)+'</span>'
+      +'</div>'
+      +'<div class="tplayers">'+rows+'</div>'
+      +'</div>';
+  }
+  document.getElementById('tstack').innerHTML =
+    teamHTML(teamA, capA, 'ta', '🟢', 'Team A') +
+    teamHTML(teamB, capB, 'tb', '🔴', 'Team B');
+}
+
+function tossCoin(){
+  if(tossing) return;
+  tossing = true; tossN++;
+  var coin = document.getElementById('coin');
+  var res  = document.getElementById('tres');
+  var sub  = document.getElementById('tsub');
+  res.classList.remove('show');
+  sub.textContent = '';
+  coin.classList.remove('spin');
+  void coin.offsetWidth;
+  coin.classList.add('spin');
+  var out = Math.random()<.5 ? 'heads' : 'tails';
+  setTimeout(function(){
+    res.textContent = out==='heads' ? '🌟 HEADS' : '🌑 TAILS';
+    res.className = 'tres '+out+' show';
+    sub.textContent = out==='heads' ? 'Bright side up!' : 'Bat first!';
+    var hist = document.getElementById('thist');
+    var row = document.createElement('div');
+    row.className = 'thist-row';
+    row.innerHTML = '<span>Toss #'+tossN+'</span>'
+      +'<span style="color:'+(out==='heads'?'var(--gold)':'#c8a96e')+'">'+out.toUpperCase()+'</span>';
+    hist.insertBefore(row, hist.firstChild);
+    tossing = false;
+  }, 1550);
+}
+
+function goTo(n){
+  for(var i=1;i<=3;i++){
+    document.getElementById('sec'+i).classList.toggle('on', i===n);
+    document.getElementById('sn'+i).className = 'snum'+(i===n?' on':i<n?' done':'');
+    document.getElementById('sl'+i).className = 'slabel'+(i===n?' on':'');
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function fresh(){
+  players=[]; teamA=[]; teamB=[]; tossN=0; tossing=false;
+  document.getElementById('thist').innerHTML='';
+  document.getElementById('tres').className='tres';
+  document.getElementById('tsub').textContent='';
+  render();
+  goTo(1);
+}
+
+function toast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2000);
+}
+
+function esc(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Init after DOM is fully parsed — safe because script is at bottom of body
+render();
+</script>
+</body>
+</html>
