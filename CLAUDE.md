@@ -11,7 +11,7 @@
 ## Project Overview
 
 A **FastAPI + Supabase PWA** that fairly splits cricket players into two skill-balanced and
-bowling-balanced teams. Originally a single-file HTML tool, now a full-stack web app with:
+bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** system. Originally a single-file HTML tool, now a full-stack web app with:
 
 - Persistent match sessions with cross-device sync (optional auth)
 - Skill-level + bowling-ability balanced team generation
@@ -19,7 +19,18 @@ bowling-balanced teams. Originally a single-file HTML tool, now a full-stack web
 - Match session renaming
 - Late-player addition directly from the Teams view
 - Teams preserved across navigation — no accidental regeneration
-- Coin toss with history
+- Coin toss with history and decision recording (winner team + bat/field election saved to DB)
+- **Ball-by-ball scorekeeping** (Quick Match mode — no player tracking required)
+  - Always two innings — both teams bat; innings break screen shows target
+  - Configurable: overs (free text), players/side, max wickets (supports single-batter)
+  - Three rule toggles: Wide +1 extra, No Ball +1 extra, No Ball → Free Hit
+  - Free Hit 🔥 banner + gold ring marker in over breakdown; only Run Out allowed
+  - Undo last ball (recomputes everything from timeline)
+  - Wide, No Ball, Bye, Leg Bye, Wicket, Dot, Runs 0–6 events
+  - Win detection mid-innings when chasing team passes target
+  - Target & required run rate displayed during second innings chase
+  - Over breakdown and recent balls display
+  - Mobile-first one-handed scoring UI at `/score`
 - Profile page — display name, email/password management, match history, player stats
 - Forgot password flow via Supabase email reset
 - Offline-capable PWA (installable on mobile)
@@ -69,12 +80,14 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   │   ├── sessions.py             ← CRUD: match sessions (incl. rename)
 │   │   ├── players.py              ← CRUD: players per session (incl. can_bowl, edit)
 │   │   ├── teams.py                ← team generation, team persistence, add-to-team
-│   │   ├── toss.py                 ← coin toss + history
+│   │   ├── toss.py                 ← coin toss, history, winner + election recording (PATCH)
 │   │   ├── auth.py                 ← JWT verify, /me, /claim
-│   │   └── profile.py              ← history, stats, display name, delete account
+│   │   ├── profile.py              ← history, stats, display name, delete account
+│   │   └── matches.py              ← scorekeeping: matches, innings, ball events, undo, scorecard
 │   ├── templates/
 │   │   ├── index.html              ← main SPA (HTML + CSS + JS, no build step)
-│   │   └── profile.html            ← profile page (account mgmt, history, stats)
+│   │   ├── profile.html            ← profile page (account mgmt, history, stats)
+│   │   └── score.html              ← ball-by-ball scoring UI (Quick Match mode, mobile-first)
 │   ├── static/
 │   │   ├── manifest.json           ← PWA manifest
 │   │   ├── sw.js                   ← service worker
@@ -83,6 +96,8 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   ├── supabase_auth_migration.sql ← adds owner_id + RLS policies (run second)
 │   ├── supabase_features_migration.sql ← adds can_bowl, team name columns (run third)
 │   ├── supabase_profile_migration.sql  ← creates user_profiles table (run fourth)
+│   ├── supabase_scoring_migration.sql  ← scorekeeping tables (run fifth)
+│   ├── supabase_toss_decision_migration.sql ← winner_team + elected_to columns (run sixth)
 │   ├── requirements.txt
 │   ├── .gitignore
 │   └── .env.example
@@ -131,6 +146,8 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 2. `supabase_auth_migration.sql` — auth: `owner_id` column + RLS policies
 3. `supabase_features_migration.sql` — features: `can_bowl`, `team_a_name`, `team_b_name`
 4. `supabase_profile_migration.sql` — profile: `user_profiles` table
+5. `supabase_scoring_migration.sql` — scorekeeping: `matches`, `match_rules`, `innings`, `ball_events`, `player_match_stats`
+6. `supabase_toss_decision_migration.sql` — adds `winner_team` + `elected_to` columns to `toss_history`
 
 ### Tables
 
@@ -170,6 +187,8 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `id` | `uuid` PK | |
 | `session_id` | `uuid` FK | → `sessions(id)` ON DELETE CASCADE |
 | `result` | `text` | CHECK in `('heads','tails')` |
+| `winner_team` | `text` nullable | Team name that won the toss — set via PATCH after user picks |
+| `elected_to` | `text` nullable | CHECK in `('bat','field')` — what the winner chose |
 | `tossed_at` | `timestamptz` | |
 
 #### `user_profiles`
@@ -185,6 +204,71 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 > ```sql
 > alter table user_profiles disable row level security;
 > ```
+
+#### `matches`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `session_id` | `uuid` nullable FK | → `sessions(id)` ON DELETE SET NULL |
+| `match_type` | `text` | `'quick'` or `'team'` |
+| `status` | `text` | `'setup'`, `'live'`, `'innings_break'`, `'completed'` |
+| `overs` | `integer` | total overs per innings |
+| `players_per_side` | `integer` | |
+| `rules_preset` | `text` | `'standard'`, `'box'`, `'gully'`, `'custom'` |
+| `created_at` | `timestamptz` | |
+
+#### `match_rules`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `match_id` | `uuid` FK | → `matches(id)` ON DELETE CASCADE, unique |
+| `rules_json` | `jsonb` | full `MatchRules` dict |
+| `updated_at` | `timestamptz` | |
+
+#### `innings`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `match_id` | `uuid` FK | → `matches(id)` ON DELETE CASCADE |
+| `innings_number` | `integer` | 1 or 2 |
+| `batting_team` | `text` | |
+| `bowling_team` | `text` | |
+| `target` | `integer` nullable | set after innings 1 completes |
+| `status` | `text` | `'live'` or `'completed'` |
+| `created_at` | `timestamptz` | |
+
+#### `ball_events`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `innings_id` | `uuid` FK | → `innings(id)` ON DELETE CASCADE |
+| `over_number` | `integer` | 0-indexed |
+| `ball_number` | `integer` | 0-indexed within over (legal balls) |
+| `event_type` | `text` | dot/runs/wide/no_ball/bye/leg_bye/wicket/dead_ball/penalty |
+| `runs` | `integer` | runs scored off bat (not extras) |
+| `extras` | `integer` | extras awarded (wide/no_ball penalty + bye/leg_bye runs) |
+| `extra_type` | `text` nullable | wide/no_ball/bye/leg_bye |
+| `is_legal_ball` | `boolean` | false for wide/no_ball (doesn't consume over slot) |
+| `is_boundary` | `boolean` | |
+| `boundary_type` | `text` nullable | four/six |
+| `wicket_type` | `text` nullable | bowled/caught/run_out/lbw/stumped/hit_wicket |
+| `batter_id` | `uuid` nullable FK | → `players(id)` ON DELETE SET NULL |
+| `bowler_id` | `uuid` nullable FK | → `players(id)` ON DELETE SET NULL |
+| `metadata` | `jsonb` | future-proof extra data |
+| `created_at` | `timestamptz` | |
+
+#### `player_match_stats`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `match_id` | `uuid` FK | → `matches(id)` ON DELETE CASCADE |
+| `player_id` | `uuid` nullable FK | → `players(id)` ON DELETE SET NULL |
+| `player_name` | `text` | denormalized for stats display |
+| `batting_stats` | `jsonb` | runs/balls/fours/sixes/strike_rate/status/dismissal |
+| `bowling_stats` | `jsonb` | overs/maidens/runs/wickets/economy |
+
+> **RLS on scorekeeping tables:** All five new tables have RLS **disabled**. The backend
+> uses the `service_role` key which bypasses RLS anyway.
 
 ### Row Level Security
 
@@ -233,7 +317,8 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 ### Toss — `/api/sessions/{id}/toss`
 | Method | Path | Body | Description |
 |--------|------|------|-------------|
-| `POST` | `…/toss` | — | Flip coin, store result, return toss number |
+| `POST` | `…/toss` | — | Flip coin, store result, return toss id + number |
+| `PATCH` | `…/toss/{toss_id}` | `{winner_team, elected_to}` | Record which team won and whether they bat/field |
 | `GET` | `…/toss/history` | — | Last 20 tosses for session |
 
 ### Auth — `/api/auth`
@@ -252,6 +337,26 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `DELETE` | `/api/profile` | Bearer JWT | Delete all owned sessions + Supabase auth account via admin REST API |
 
 > **Email and password changes** are handled entirely browser-side via `supaAuth.auth.updateUser()` — no backend endpoint. Password change re-authenticates with the current password first via `supaAuth.auth.signInWithPassword()` before calling `updateUser`.
+
+### Matches (Scorekeeping) — `/api/matches`
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/matches` | `MatchCreate` | Create a new match with rules |
+| `GET` | `/api/matches` | `?session_id=` | List matches (latest 50, optional filter by session) |
+| `GET` | `/api/matches/{id}` | — | Get match |
+| `DELETE` | `/api/matches/{id}` | — | Delete match + all innings/balls |
+| `GET` | `/api/matches/{id}/rules` | — | Get current rules JSON |
+| `PATCH` | `/api/matches/{id}/rules` | `UpdateMatchRulesRequest` | Update rules |
+| `POST` | `/api/matches/{id}/innings` | `InningsCreate` | Create innings 1 or 2 |
+| `GET` | `/api/matches/{id}/innings` | — | List all innings for match |
+| `POST` | `/api/matches/{id}/innings/{inn_id}/complete` | — | Mark innings complete; sets target for 2nd innings |
+| `POST` | `/api/matches/{id}/innings/{inn_id}/ball` | `BallEventCreate` | Record a delivery; returns updated `InningsScorecard` |
+| `POST` | `/api/matches/{id}/innings/{inn_id}/undo` | — | Delete last ball; returns updated `InningsScorecard` |
+| `GET` | `/api/matches/{id}/innings/{inn_id}/scorecard` | — | Live scorecard for one innings |
+| `GET` | `/api/matches/{id}/innings/{inn_id}/timeline` | — | All ball events for one innings |
+| `GET` | `/api/matches/{id}/scorecard` | — | Full match scorecard (all innings) |
+
+> **Score page** — `/score` (GET) renders `score.html`. Accepts query params `session`, `name`, `teamA`, `teamB`, `overs` to pre-populate setup form.
 
 > **Forgot password** is handled browser-side via `supaAuth.auth.resetPasswordForEmail()` with `redirectTo: window.location.origin + '/'`. The `PASSWORD_RECOVERY` event in `onAuthStateChange` opens the set-new-password modal.
 
@@ -273,15 +378,26 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `TeamAssignmentOut` | response | `player_id, player_name, skill, can_bowl, team_name, is_captain` |
 | `TeamsOut` | response | `team_a_name, team_b_name, assignments[]` |
 | `AddToTeamRequest` | request | `name, skill, can_bowl=False, team_name` |
-| `TossResult` | response | `result, toss_number, session_id` |
-| `TossHistoryItem` | response | `id, result, tossed_at` |
+| `TossResult` | response | `id, result, toss_number, session_id, winner_team?, elected_to?` |
+| `TossDecisionUpdate` | request | `winner_team, elected_to` |
+| `TossHistoryItem` | response | `id, result, tossed_at, winner_team?, elected_to?` |
 | `UserOut` | response | `id, email` |
 | `ClaimRequest` | request | `session_ids[]` |
-| `TossHistorySummary` | response | `result, tossed_at` |
+| `TossHistorySummary` | response | `result, tossed_at, winner_team?, elected_to?` |
 | `MatchPlayerItem` | response | `name, skill, can_bowl, team_name, is_captain` |
 | `MatchHistoryItem` | response | `id, name, created_at, team_a_name, team_b_name, players[], toss_history[]` |
 | `PlayerStatsItem` | response | `name, games, as_captain, as_bowler` |
 | `UpdateDisplayNameRequest` | request | `display_name` (min 1, max 40) |
+| `MatchRules` | config | `wide_runs, wide_counts_as_ball, wide_reball, no_ball_runs, no_ball_counts_as_ball, no_ball_reball, free_hit_enabled, free_hit_dismissals, wicket_types[], last_man_standing, retirement_runs, boundary_four, boundary_six` |
+| `MatchCreate` | request | `session_id?, match_type, overs, players_per_side, rules_preset, rules?` |
+| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, created_at` |
+| `InningsCreate` | request | `batting_team, bowling_team` |
+| `InningsOut` | response | `id, match_id, innings_number, batting_team, bowling_team, target, status, created_at` |
+| `BallEventCreate` | request | `event_type, runs, extra_type?, is_boundary, boundary_type?, wicket_type?, batter_id?, bowler_id?, metadata` |
+| `BallEventOut` | response | `id, innings_id, over_number, ball_number, event_type, runs, extras, extra_type, is_legal_ball, is_boundary, boundary_type, wicket_type, batter_id, bowler_id, metadata, created_at` |
+| `InningsScorecard` | response | `innings, total_runs, total_wickets, total_overs, run_rate, target, required_run_rate, balls[]` |
+| `MatchScorecard` | response | `match, rules, innings_list[]` |
+| `UpdateMatchRulesRequest` | request | `rules: MatchRules` |
 
 ---
 
@@ -317,7 +433,7 @@ inline `<script>`. To add a feature: edit this file directly.
 | Stepper | `.steps` | Steps 1→2→3 with done/active/pending states |
 | Step 1 | `#sec1` | Add players: name input, skill pills, can_bowl toggle, player list with inline edit |
 | Step 2 | `#sec2` | Team cards, action row, collapsible late-player add panel |
-| Step 3 | `#sec3` | Coin toss with animation and history |
+| Step 3 | `#sec3` | Coin toss with animation, history, and inline decision panel (winner + bat/field) |
 
 ### Key State Variables
 | Variable | Type | Description |
@@ -332,6 +448,8 @@ inline `<script>`. To add a feature: edit this file directly.
 | `lateTeamPick` | `'a'`\|`'b'` | Which team the late player will join |
 | `_editingPlayerId` | string\|null | ID of the player row currently open for inline editing |
 | `_loadingSessionsLock` | boolean | Mutex preventing concurrent `loadSessions()` calls |
+| `lastTossId` | string\|null | UUID of the most recent toss — used by the decision panel to PATCH the result |
+| `tossWinner` | `'a'`\|`'b'`\|null | Which side the user selected as the toss winner; cleared on each new toss |
 
 ### Key localStorage
 | Key | Value |
@@ -427,9 +545,12 @@ sessions where it is currently `NULL`, atomically assigning them to the new user
 [ ] 6. Run supabase_features_migration.sql (can_bowl + team name columns)
 [ ] 7. Run supabase_profile_migration.sql (user_profiles table)
 [ ] 8. Run: ALTER TABLE user_profiles DISABLE ROW LEVEL SECURITY;
-[ ] 9. Set SUPABASE_ANON_KEY in .env (if using auth)
-[ ]10. Add icon-192.png and icon-512.png to app/static/icons/
-[ ]11. Run server: uvicorn app.main:app --reload --port 8000
+[ ] 9. Run supabase_scoring_migration.sql (scorekeeping tables)
+[ ]10. Run supabase_toss_decision_migration.sql (winner_team + elected_to on toss_history)
+[ ]11. Set SUPABASE_ANON_KEY in .env (if using auth)
+[ ]12. Add icon-192.png and icon-512.png to app/static/icons/
+[ ]13. Run server: uvicorn app.main:app --reload --port 8000
+[ ]14. Visit /score to verify scorekeeping UI loads
 ```
 
 ---
@@ -468,6 +589,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | Display name save: RLS violation | `user_profiles` table has RLS enabled | Run `ALTER TABLE user_profiles DISABLE ROW LEVEL SECURITY;` |
 | Display name save: "cannot insert into view" | Old `user_profiles` view artifact exists | Run `DROP VIEW IF EXISTS user_profiles CASCADE; DROP TABLE IF EXISTS user_profiles CASCADE;` then recreate |
 | Delete account 403 | Supabase admin API blocked | Check service_role key is the legacy JWT format |
+| Over counter advances on wide/no-ball | `_is_legal()` in `matches.py` was inverted — `not rules.get("wide_counts_as_ball", False)` returned `True` for wides | Fixed: use `bool(rules.get(...))`. Existing DB rows are unaffected; start a new match to get correct `is_legal_ball` values |
+| Green pill artifact above bottom bar | `backdrop-filter:blur` on `.bottom-bar` let the last toggle row bleed through the semi-transparent background | Fixed: `.bottom-bar` now uses solid `#080f14` background, no backdrop-filter |
+| Multiple bottom bars stack on top of each other | `position:fixed` children escape their parent's `display:none`, so all view bottom-bars were visible simultaneously | Fixed: all `.bottom-bar` divs moved outside `.view` containers; `showView()` hides all bars then shows `#bar-{viewId}` |
+| Toss decision PATCH returns 404 | `supabase_toss_decision_migration.sql` not run — `winner_team`/`elected_to` columns missing | Run `supabase_toss_decision_migration.sql` in Supabase SQL Editor |
+| Decision panel doesn't show team names | No teams generated yet (`teamsData` is null) | Generate teams (Step 2) before going to toss — team names populate the winner buttons |
 
 ---
 
@@ -478,12 +604,16 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **New env var**: add to `.env.example` → add to Environment Variables table above
 - **New frontend state**: add to Key State Variables table above
 - **No ORM**: all DB calls go through `supabase_client` in `database.py`
-- **No build step**: JS/CSS stays inside `index.html`
+- **No build step**: JS/CSS stays inside `index.html` or `score.html`; no framework
 - **Cascade deletes**: deleting a session auto-removes players, assignments, toss history
 - **Skill constraint**: enforced in both Pydantic (`Literal`) and Postgres (`CHECK`)
 - **Bowling split is best-effort**: odd number of bowlers gives one team one extra — not rejected
 - **Email/password changes**: always browser-side via Supabase JS SDK — never add backend endpoints for these
 - **Admin API calls**: only httpx DELETE for account deletion; all other auth admin ops are browser-side
+- **Scorekeeping is stateless**: score is always derived from `ball_events` timeline — never store a mutable score counter
+- **Rules are config-driven**: all scoring behaviour (wide runs, free hit, etc.) comes from `match_rules.rules_json`, never hardcoded in `matches.py`
+- **Score page is standalone**: `/score` works without a session (Quick Match); `session_id` is optional
+- **RULES_PRESETS** is defined in both `models.py` (backend) and `score.html` (frontend JS) — keep them in sync
 
 ---
 

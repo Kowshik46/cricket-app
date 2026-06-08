@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
 from uuid import UUID
 from datetime import datetime
 
@@ -67,15 +67,25 @@ class AddToTeamRequest(BaseModel):
 
 
 class TossResult(BaseModel):
+    id: UUID
     result: Literal["heads", "tails"]
     toss_number: int
     session_id: UUID
+    winner_team: Optional[str] = None
+    elected_to: Optional[Literal["bat", "field"]] = None
+
+
+class TossDecisionUpdate(BaseModel):
+    winner_team: str = Field(..., min_length=1, max_length=40)
+    elected_to: Literal["bat", "field"]
 
 
 class TossHistoryItem(BaseModel):
     id: UUID
     result: Literal["heads", "tails"]
     tossed_at: datetime
+    winner_team: Optional[str] = None
+    elected_to: Optional[Literal["bat", "field"]] = None
 
 
 class UserOut(BaseModel):
@@ -92,6 +102,8 @@ class ClaimRequest(BaseModel):
 class TossHistorySummary(BaseModel):
     result: Literal["heads", "tails"]
     tossed_at: datetime
+    winner_team: Optional[str] = None
+    elected_to: Optional[Literal["bat", "field"]] = None
 
 
 class MatchPlayerItem(BaseModel):
@@ -129,3 +141,150 @@ class UpdateEmailRequest(BaseModel):
 
 class UpdatePasswordRequest(BaseModel):
     password: str = Field(..., min_length=6)
+
+
+# ── Scorekeeping models ───────────────────────────────────────────────────────
+
+# Rules presets and config
+class MatchRules(BaseModel):
+    # Wide ball
+    wide_runs: int = 1
+    wide_counts_as_ball: bool = False
+    wide_reball: bool = True
+    # No ball
+    no_ball_runs: int = 1
+    no_ball_counts_as_ball: bool = False
+    no_ball_reball: bool = True
+    # Free hit (after no ball)
+    free_hit_enabled: bool = True
+    free_hit_dismissals: Literal["none", "run_out", "run_out_stumping", "all"] = "run_out"
+    # Wicket types allowed
+    wicket_types: list[str] = ["bowled", "caught", "run_out", "lbw", "stumped", "hit_wicket"]
+    # Last-man standing
+    last_man_standing: bool = False
+    # Retirement
+    retirement_runs: Optional[int] = None  # None = disabled
+    # Boundary values
+    boundary_four: int = 4
+    boundary_six: int = 6
+
+
+RULES_PRESETS: dict[str, dict] = {
+    "standard": {
+        "wide_runs": 1, "wide_counts_as_ball": False, "wide_reball": True,
+        "no_ball_runs": 1, "no_ball_counts_as_ball": False, "no_ball_reball": True,
+        "free_hit_enabled": True, "free_hit_dismissals": "run_out",
+        "wicket_types": ["bowled", "caught", "run_out", "lbw", "stumped", "hit_wicket"],
+        "last_man_standing": False, "retirement_runs": None,
+        "boundary_four": 4, "boundary_six": 6,
+    },
+    "box": {
+        "wide_runs": 1, "wide_counts_as_ball": True, "wide_reball": False,
+        "no_ball_runs": 1, "no_ball_counts_as_ball": True, "no_ball_reball": False,
+        "free_hit_enabled": False, "free_hit_dismissals": "none",
+        "wicket_types": ["bowled", "caught", "run_out", "stumped"],
+        "last_man_standing": False, "retirement_runs": None,
+        "boundary_four": 4, "boundary_six": 6,
+    },
+    "gully": {
+        "wide_runs": 1, "wide_counts_as_ball": False, "wide_reball": True,
+        "no_ball_runs": 1, "no_ball_counts_as_ball": False, "no_ball_reball": True,
+        "free_hit_enabled": False, "free_hit_dismissals": "none",
+        "wicket_types": ["bowled", "caught", "run_out"],
+        "last_man_standing": True, "retirement_runs": None,
+        "boundary_four": 4, "boundary_six": 6,
+    },
+}
+
+
+class MatchCreate(BaseModel):
+    session_id: Optional[str] = None
+    match_type: Literal["quick", "team"] = "quick"
+    overs: int = Field(default=6, ge=1, le=50)
+    players_per_side: int = Field(default=6, ge=2, le=11)
+    rules_preset: Literal["standard", "box", "gully", "custom"] = "standard"
+    rules: Optional[MatchRules] = None  # custom override
+
+
+class MatchOut(BaseModel):
+    id: UUID
+    session_id: Optional[UUID]
+    match_type: str
+    status: str
+    overs: int
+    players_per_side: int
+    rules_preset: str
+    created_at: datetime
+
+
+class InningsCreate(BaseModel):
+    batting_team: str = Field(..., min_length=1, max_length=40)
+    bowling_team: str = Field(..., min_length=1, max_length=40)
+
+
+class InningsOut(BaseModel):
+    id: UUID
+    match_id: UUID
+    innings_number: int
+    batting_team: str
+    bowling_team: str
+    target: Optional[int]
+    status: str
+    created_at: datetime
+
+
+EventType = Literal["dot", "runs", "wide", "no_ball", "bye", "leg_bye", "wicket", "dead_ball", "penalty"]
+BoundaryType = Literal["four", "six"]
+WicketType = Literal["bowled", "caught", "run_out", "lbw", "stumped", "hit_wicket"]
+
+
+class BallEventCreate(BaseModel):
+    event_type: EventType
+    runs: int = Field(default=0, ge=0, le=36)
+    extra_type: Optional[Literal["wide", "no_ball", "bye", "leg_bye"]] = None
+    is_boundary: bool = False
+    boundary_type: Optional[BoundaryType] = None
+    wicket_type: Optional[WicketType] = None
+    batter_id: Optional[str] = None
+    bowler_id: Optional[str] = None
+    metadata: dict[str, Any] = {}
+
+
+class BallEventOut(BaseModel):
+    id: UUID
+    innings_id: UUID
+    over_number: int
+    ball_number: int
+    event_type: str
+    runs: int
+    extras: int
+    extra_type: Optional[str]
+    is_legal_ball: bool
+    is_boundary: bool
+    boundary_type: Optional[str]
+    wicket_type: Optional[str]
+    batter_id: Optional[UUID]
+    bowler_id: Optional[UUID]
+    metadata: dict[str, Any]
+    created_at: datetime
+
+
+class InningsScorecard(BaseModel):
+    innings: InningsOut
+    total_runs: int
+    total_wickets: int
+    total_overs: float   # e.g. 5.3 = 5 overs 3 balls
+    run_rate: float
+    target: Optional[int]
+    required_run_rate: Optional[float]
+    balls: list[BallEventOut]
+
+
+class MatchScorecard(BaseModel):
+    match: MatchOut
+    rules: dict[str, Any]
+    innings_list: list[InningsScorecard]
+
+
+class UpdateMatchRulesRequest(BaseModel):
+    rules: MatchRules

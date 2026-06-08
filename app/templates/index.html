@@ -223,6 +223,17 @@ h1 em{color:var(--gold);font-style:normal}
 .thist-row span:first-child{opacity:.5}
 .btntoss{display:block;width:100%;padding:15px;background:linear-gradient(135deg,#c8a96e,#f4c842);color:var(--sky);border:none;border-radius:12px;font-family:'DM Mono',monospace;font-size:.82rem;font-weight:700;letter-spacing:1px;cursor:pointer;transition:all .15s}
 .btntoss:active{transform:scale(.97);opacity:.9}
+/* TOSS DECISION */
+.tdecision{margin-top:14px;display:none;flex-direction:column;gap:10px}
+.tdecision.show{display:flex}
+.tdlabel{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);text-align:center}
+.tdteams{display:flex;gap:8px}
+.tdbtn{flex:1;padding:11px 6px;border-radius:10px;border:1px solid var(--cb);background:transparent;color:var(--cream);font-family:'DM Mono',monospace;font-size:.75rem;cursor:pointer;transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tdbtn:hover{border-color:var(--gold);color:var(--gold)}
+.tdbtn.sel{background:rgba(244,200,66,.12);border-color:var(--gold);color:var(--gold);font-weight:700}
+.tdelect{display:flex;gap:8px}
+.tdelect .tdbtn{font-size:.7rem}
+.tdresult{font-family:'DM Mono',monospace;font-size:.7rem;color:#74d494;text-align:center;min-height:1em;letter-spacing:.5px}
 
 /* MODAL */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -335,6 +346,8 @@ h1 em{color:var(--gold);font-style:normal}
     <div class="sitem"><div class="snum" id="sn2">2</div><span class="slabel" id="sl2">Teams</span></div>
     <div class="sline"></div>
     <div class="sitem"><div class="snum" id="sn3">3</div><span class="slabel" id="sl3">Toss</span></div>
+    <div class="sline"></div>
+    <div class="sitem"><div class="snum" id="sn4">4</div><span class="slabel" id="sl4">Score</span></div>
   </div>
 
   <!-- SEC 1: PLAYERS -->
@@ -375,6 +388,7 @@ h1 em{color:var(--gold);font-style:normal}
         <button class="btnprim" id="genBtn" onclick="openGenerateModal()" disabled style="flex:1">⚡ Generate Teams</button>
         <button class="btnout gold" id="viewTeamsBtn" onclick="goToTeams()" style="display:none;flex:0 0 auto;padding:15px 14px">View Teams →</button>
       </div>
+      <button class="btnout" onclick="goToScore()" style="margin-top:8px;width:100%;border-color:rgba(244,200,66,.25);color:var(--muted)">🏏 Quick Score (skip teams)</button>
     </div>
   </div>
 
@@ -443,6 +457,20 @@ h1 em{color:var(--gold);font-style:normal}
         </div>
         <div class="tres" id="tres"></div>
         <div class="tsub" id="tsub"></div>
+        <!-- Toss decision: who won + what they chose -->
+        <div class="tdecision" id="tdecision">
+          <div class="tdlabel">Who won the toss?</div>
+          <div class="tdteams" id="tdteams">
+            <button class="tdbtn" id="tdwinA" onclick="selectTossWinner('a')"></button>
+            <button class="tdbtn" id="tdwinB" onclick="selectTossWinner('b')"></button>
+          </div>
+          <div class="tdlabel" id="tdelectlabel" style="display:none">They elected to…</div>
+          <div class="tdelect" id="tdelect" style="display:none">
+            <button class="tdbtn" onclick="selectTossElect('bat')">🏏 Bat</button>
+            <button class="tdbtn" onclick="selectTossElect('field')">🧤 Field</button>
+          </div>
+          <div class="tdresult" id="tdresult"></div>
+        </div>
         <div class="thist" id="thist"></div>
       </div>
       <div class="hr"></div>
@@ -450,6 +478,7 @@ h1 em{color:var(--gold);font-style:normal}
       <div class="arow" style="margin-top:10px">
         <button class="btnout" onclick="goTo(2)">← Teams</button>
         <button class="btnout" onclick="confirmNewMatch()">🔄 New Match</button>
+        <button class="btnout gold" onclick="goToScore()">🏏 Score →</button>
       </div>
     </div>
   </div>
@@ -594,6 +623,8 @@ var players = [];
 var teamsData = null;
 var tossN = 0;
 var tossing = false;
+var lastTossId = null;
+var tossWinner = null;    // 'a' or 'b'
 var currentUser = null;
 var canBowl = false;         // step-1 add-player toggle
 var lateCanBowl = false;     // step-2 late-player toggle
@@ -1460,25 +1491,85 @@ async function tossCoin(){
   void coin.offsetWidth;
   coin.classList.add('spin');
 
+  // Reset decision UI
+  lastTossId = null; tossWinner = null;
+  var dec = document.getElementById('tdecision');
+  dec.classList.remove('show');
+  document.getElementById('tdresult').textContent = '';
+  document.getElementById('tdelectlabel').style.display = 'none';
+  document.getElementById('tdelect').style.display = 'none';
+  document.querySelectorAll('#tdteams .tdbtn').forEach(function(b){ b.classList.remove('sel'); });
+  document.querySelectorAll('#tdelect .tdbtn').forEach(function(b){ b.classList.remove('sel'); });
+
   try {
     var data = await api('POST', '/sessions/' + currentSessionId + '/toss');
     tossN = data.toss_number;
+    lastTossId = data.id;
     setTimeout(function(){
       var out = data.result;
       res.textContent = out === 'heads' ? '🌟 HEADS' : '🌑 TAILS';
       res.className = 'tres ' + out + ' show';
-      sub.textContent = out === 'heads' ? 'Bright side up!' : 'Bat first!';
+      sub.textContent = out === 'heads' ? 'Bright side up!' : 'Dark side up!';
       var hist = document.getElementById('thist');
       var row = document.createElement('div');
       row.className = 'thist-row';
+      row.setAttribute('data-toss-id', data.id);
       row.innerHTML = '<span>Toss #' + tossN + '</span>'
         + '<span style="color:' + (out==='heads'?'var(--gold)':'#c8a96e') + '">' + out.toUpperCase() + '</span>';
       hist.insertBefore(row, hist.firstChild);
+
+      // Populate winner buttons with actual team names
+      var nameA = (teamsData && teamsData.team_a_name) ? teamsData.team_a_name : 'Team A';
+      var nameB = (teamsData && teamsData.team_b_name) ? teamsData.team_b_name : 'Team B';
+      document.getElementById('tdwinA').textContent = nameA;
+      document.getElementById('tdwinB').textContent = nameB;
+      dec.classList.add('show');
+
       tossing = false;
     }, 1550);
   } catch(e){
     toast('Toss failed: ' + e.message, true);
     tossing = false;
+  }
+}
+
+function selectTossWinner(side){
+  tossWinner = side;
+  document.getElementById('tdwinA').classList.toggle('sel', side === 'a');
+  document.getElementById('tdwinB').classList.toggle('sel', side === 'b');
+  document.getElementById('tdelectlabel').style.display = '';
+  document.getElementById('tdelect').style.display = '';
+  document.querySelectorAll('#tdelect .tdbtn').forEach(function(b){ b.classList.remove('sel'); });
+  document.getElementById('tdresult').textContent = '';
+}
+
+async function selectTossElect(choice){
+  if(!lastTossId || !tossWinner) return;
+  var btns = document.querySelectorAll('#tdelect .tdbtn');
+  btns.forEach(function(b){ b.classList.toggle('sel', b.textContent.toLowerCase().includes(choice)); });
+
+  var winnerName = tossWinner === 'a'
+    ? document.getElementById('tdwinA').textContent
+    : document.getElementById('tdwinB').textContent;
+
+  try {
+    await api('PATCH', '/sessions/' + currentSessionId + '/toss/' + lastTossId, {
+      winner_team: winnerName,
+      elected_to: choice
+    });
+    var label = choice === 'bat' ? 'bat first' : 'field first';
+    document.getElementById('tdresult').textContent = winnerName + ' elected to ' + label + ' ✓';
+
+    // Update the latest history row
+    var hist = document.getElementById('thist');
+    var latest = hist.querySelector('[data-toss-id="' + lastTossId + '"]');
+    if(latest){
+      var existing = latest.innerHTML;
+      latest.innerHTML = existing
+        + '<span style="color:#74d494;margin-left:auto">' + winnerName + ' → ' + (choice==='bat'?'BAT':'FIELD') + '</span>';
+    }
+  } catch(e){
+    toast('Could not save decision: ' + e.message, true);
   }
 }
 
@@ -1489,7 +1580,28 @@ function goTo(n){
     document.getElementById('sn'+i).className = 'snum'+(i===n?' on':i<n?' done':'');
     document.getElementById('sl'+i).className = 'slabel'+(i===n?' on':'');
   }
+  // Step 4 (Score) is a separate page — mark it done only if on step 3
+  if(document.getElementById('sn4')){
+    document.getElementById('sn4').className = 'snum';
+    document.getElementById('sl4').className = 'slabel';
+  }
   window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function goToScore(){
+  // Navigate to /score, passing current session and team info via query params
+  if(!currentSessionId){ toast('Select a match first', true); return; }
+  var params = new URLSearchParams({ session: currentSessionId });
+  var selEl = document.getElementById('sessionSelect');
+  if(selEl && selEl.options[selEl.selectedIndex]){
+    params.set('name', selEl.options[selEl.selectedIndex].text);
+  }
+  if(teamsData){
+    params.set('teamA', teamsData.team_a_name || 'Team A');
+    params.set('teamB', teamsData.team_b_name || 'Team B');
+  }
+  params.set('overs', '6');
+  window.location.href = '/score?' + params.toString();
 }
 
 // ─── Confirm helpers ──────────────────────────────────────────────────────────
@@ -1500,10 +1612,12 @@ function confirmNewMatch(){
   document.getElementById('confirmOk').textContent = 'Continue';
   document.getElementById('confirmOk').onclick = function(){
     closeModal('confirmModal');
-    tossN = 0; tossing = false;
+    tossN = 0; tossing = false; lastTossId = null; tossWinner = null;
     document.getElementById('thist').innerHTML = '';
     document.getElementById('tres').className = 'tres';
     document.getElementById('tsub').textContent = '';
+    document.getElementById('tdecision').classList.remove('show');
+    document.getElementById('tdresult').textContent = '';
     goTo(1);
   };
   openModal('confirmModal');
