@@ -294,7 +294,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | Method | Path | Body | Description |
 |--------|------|------|-------------|
 | `POST` | `/api/sessions` | `{name}` | Create session |
-| `GET` | `/api/sessions` | — | List sessions (latest 50) |
+| `GET` | `/api/sessions` | — | List sessions — auth: filter by `owner_id`; guest: filter by `?ids=` (comma-sep UUIDs stored in `localStorage`) |
 | `GET` | `/api/sessions/{id}` | — | Get single session |
 | `PATCH` | `/api/sessions/{id}` | `{name}` | Rename session |
 | `DELETE` | `/api/sessions/{id}` | — | Delete + cascade all children |
@@ -455,6 +455,7 @@ inline `<script>`. To add a feature: edit this file directly.
 | Key | Value |
 |-----|-------|
 | `cricket_last_session` | UUID of the last active session (restored on load) |
+| `cricket_sessions` | JSON array of all session UUIDs this browser has created — used to filter guest `GET /api/sessions` requests |
 
 ### Navigation rules
 - `goTo(n)` switches between steps 1/2/3 — **does not reload data**

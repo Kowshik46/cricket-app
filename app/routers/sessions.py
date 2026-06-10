@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header, Query
+from typing import Optional
 from app.models import SessionCreate, SessionOut, SessionRename
 from app.database import supabase_client
 
@@ -14,9 +15,44 @@ async def create_session(body: SessionCreate):
 
 
 @router.get("", response_model=list[SessionOut])
-async def list_sessions():
-    res = supabase_client.table("sessions").select("*").order("created_at", desc=True).limit(50).execute()
-    return res.data
+async def list_sessions(
+    authorization: Optional[str] = Header(default=None),
+    ids: Optional[str] = Query(default=None),
+):
+    # Authenticated user: filter by their owner_id
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        try:
+            resp = supabase_client.auth.get_user(token)
+            if resp and resp.user:
+                user_id = str(resp.user.id)
+                res = (
+                    supabase_client.table("sessions")
+                    .select("*")
+                    .eq("owner_id", user_id)
+                    .order("created_at", desc=True)
+                    .limit(50)
+                    .execute()
+                )
+                return res.data
+        except Exception:
+            pass
+
+    # Guest: only return sessions whose IDs the browser provided
+    if ids:
+        id_list = [i.strip() for i in ids.split(",") if i.strip()]
+        if id_list:
+            res = (
+                supabase_client.table("sessions")
+                .select("*")
+                .in_("id", id_list)
+                .is_("owner_id", "null")
+                .order("created_at", desc=True)
+                .execute()
+            )
+            return res.data
+
+    return []
 
 
 @router.get("/{session_id}", response_model=SessionOut)

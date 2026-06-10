@@ -631,6 +631,25 @@ var lateCanBowl = false;     // step-2 late-player toggle
 var lateTeamPick = 'a';      // which team the late player goes to
 
 var LS_KEY = 'cricket_last_session';
+var LS_SESSIONS = 'cricket_sessions';
+
+function _getGuestIds(){
+  try {
+    var arr = JSON.parse(localStorage.getItem(LS_SESSIONS) || '[]');
+    // backward compat: seed from last-session key if array is empty
+    var last = localStorage.getItem(LS_KEY);
+    if(last && !arr.includes(last)){ arr.push(last); localStorage.setItem(LS_SESSIONS, JSON.stringify(arr)); }
+    return arr;
+  } catch(e){ return []; }
+}
+function _addGuestId(id){
+  var arr = _getGuestIds();
+  if(!arr.includes(id)){ arr.push(id); localStorage.setItem(LS_SESSIONS, JSON.stringify(arr)); }
+}
+function _removeGuestId(id){
+  var arr = _getGuestIds().filter(function(x){ return x !== id; });
+  localStorage.setItem(LS_SESSIONS, JSON.stringify(arr));
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 setPill('intermediate');
@@ -990,7 +1009,13 @@ async function loadSessions(){
   _loadingSessionsLock = true;
   loading(true);
   try {
-    var sessions = await api('GET', '/sessions');
+    var token = await getAccessToken();
+    var sessionsPath = '/sessions';
+    if(!token){
+      var guestIds = _getGuestIds();
+      if(guestIds.length) sessionsPath = '/sessions?ids=' + guestIds.join(',');
+    }
+    var sessions = await api('GET', sessionsPath);
     var sel = document.getElementById('sessionSelect');
     sel.innerHTML = '<option value="">— select or create a match —</option>';
     sessions.forEach(function(s){
@@ -1022,6 +1047,7 @@ async function createSession(){
     var s = await api('POST', '/sessions', { name: name });
     currentSessionId = s.id;
     localStorage.setItem(LS_KEY, s.id);
+    _addGuestId(s.id);
     players = [];
     teamsData = null;
     await loadSessions();
@@ -1086,8 +1112,10 @@ async function deleteSession(){
   if(!currentSessionId) return;
   loading(true);
   try {
+    var deletedId = currentSessionId;
     await api('DELETE', '/sessions/' + currentSessionId);
     localStorage.removeItem(LS_KEY);
+    _removeGuestId(deletedId);
     currentSessionId = null; players = []; teamsData = null;
     document.getElementById('deleteSessionBtn').style.display = 'none';
     document.getElementById('renameSessionBtn').style.display = 'none';
