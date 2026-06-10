@@ -38,7 +38,8 @@ syncs your match history across devices when you sign in.
 - Teams update instantly — no reshuffle
 
 ### Coin Toss
-- Animated 3D coin flip
+- Animated 3D coin flip — coin has **H** (heads) and **T** (tails) faces; the animation ends on the correct face matching the result
+- **Quick Toss** button in Step 1 — jump straight to the toss without going through players or teams; a session is created silently in the background if one doesn't exist yet
 - Results stored per session with a toss counter
 - After the flip, an inline **decision panel** appears — tap the winning team, then choose whether they **Bat** or **Field**
 - Decision (winner + election) is saved to the database immediately and shown in the toss history row
@@ -162,6 +163,9 @@ Open [http://localhost:8000](http://localhost:8000)
 4. Repeat for all players
 5. To edit a player after adding, tap the ✎ icon — change name, skill, or bowl status inline
 6. Tap **⚡ Generate Teams** when ready
+7. Or use the shortcut buttons to skip ahead:
+   - **🏏 Quick Score** — go straight to the scoring page without generating teams
+   - **🪙 Quick Toss** — go straight to the coin toss (creates a session automatically if needed)
 
 ### Step 2 — Teams
 - Teams are displayed with skill and role badges on each player

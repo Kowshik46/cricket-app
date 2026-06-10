@@ -20,6 +20,8 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
 - Late-player addition directly from the Teams view
 - Teams preserved across navigation — no accidental regeneration
 - Coin toss with history and decision recording (winner team + bat/field election saved to DB)
+  - 3D coin has H (heads) and T (tails) faces; animation ends on the correct face matching the API result
+  - **Quick Toss** button in Step 1 jumps straight to the toss — auto-creates a session silently if none exists
 - **Ball-by-ball scorekeeping** (Quick Match mode — no player tracking required)
   - Always two innings — both teams bat; innings break screen shows target
   - Configurable: overs (free text), players/side, max wickets (supports single-batter)
@@ -431,7 +433,7 @@ inline `<script>`. To add a feature: edit this file directly.
 | Header | `header` | App title, animated bat, auth chip (top-right) |
 | Session bar | `.session-bar` | Dropdown select, new (+) button, rename (✎) button, delete (🗑) button |
 | Stepper | `.steps` | Steps 1→2→3 with done/active/pending states |
-| Step 1 | `#sec1` | Add players: name input, skill pills, can_bowl toggle, player list with inline edit |
+| Step 1 | `#sec1` | Add players: name input, skill pills, can_bowl toggle, player list with inline edit; **🏏 Quick Score** and **🪙 Quick Toss** gold shortcut buttons below Generate |
 | Step 2 | `#sec2` | Team cards, action row, collapsible late-player add panel |
 | Step 3 | `#sec3` | Coin toss with animation, history, and inline decision panel (winner + bat/field) |
 
