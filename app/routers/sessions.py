@@ -7,8 +7,22 @@ router = APIRouter()
 
 
 @router.post("", response_model=SessionOut, status_code=201)
-async def create_session(body: SessionCreate):
-    res = supabase_client.table("sessions").insert({"name": body.name}).execute()
+async def create_session(body: SessionCreate, authorization: Optional[str] = Header(default=None)):
+    owner_id = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        try:
+            resp = supabase_client.auth.get_user(token)
+            if resp and resp.user:
+                owner_id = str(resp.user.id)
+        except Exception:
+            pass
+
+    row: dict = {"name": body.name}
+    if owner_id:
+        row["owner_id"] = owner_id
+
+    res = supabase_client.table("sessions").insert(row).execute()
     if not res.data:
         raise HTTPException(500, "Failed to create session")
     return res.data[0]
