@@ -60,8 +60,10 @@ syncs your match history across devices when you sign in.
 - Launch from the "🏏 Score →" button on Step 3 (Toss), or "Quick Score" from Step 1
 
 ### Share
-- Format both teams as plaintext (with skill + bowl labels)
-- One-tap copy to clipboard
+- **Native share sheet** on mobile — tap Share to open the OS share menu and send to WhatsApp, Messages, or any app
+- **WhatsApp button** on desktop — opens `wa.me` directly with the formatted team list pre-filled
+- One-tap copy to clipboard as fallback
+- Format includes team names, captain crown 👑, skill level, and bowl tag
 
 ### PWA / Offline
 - Installable on Android and iOS ("Add to Home Screen")
@@ -261,13 +263,11 @@ Interactive docs available at `http://localhost:8000/docs` when the server is ru
 
 ## Team Balancing Logic
 
-Players are split using a two-pass snake draft:
+Players are split using a single continuous snake draft (A, B, B, A, A, B, B, A…):
 
-1. **Bowlers first** — sorted by skill weight (Expert → Intermediate → Beginner), then
-   alternated into Team A and Team B. This ensures bowling is evenly distributed.
-2. **Non-bowlers** — same sort and alternation, filling the remaining spots.
-3. **Tier shuffle** — within each team, players of the same skill level are randomly
-   shuffled so the batting order has variety.
+1. **Bowlers first** — sorted by skill weight (Expert → Intermediate → Beginner), snake-drafted into Team A and Team B.
+2. **Non-bowlers** — same sort, snake-drafted continuing the **same pick index** from where bowlers left off. This means the best non-bowler never automatically lands on the same team as the best bowler.
+3. **Tier shuffle** — within each team, players of the same skill level are randomly shuffled for variety.
 4. **Captain** — one player per team is randomly selected as captain.
 
 If the number of bowlers is odd, one team gets one extra bowler (best-effort, not rejected).
@@ -280,6 +280,7 @@ If the number of bowlers is odd, one team gets one extra bowler (best-effort, no
 |---------|-----|
 | App won't start — `ModuleNotFoundError` | Run `uvicorn` from the **project root**, not inside `app/` |
 | `SupabaseException: Invalid API key` | Use the **legacy JWT key** (`eyJ...`) from the "Legacy" tab in Supabase Dashboard |
+| Sessions disappear after creating them while logged in | Fixed — `POST /sessions` now stamps `owner_id` from the JWT so sessions appear in the authenticated user's list |
 | Teams gone after navigating back | Run `supabase_features_migration.sql` — adds the team name columns needed for DB restoration |
 | `can_bowl` column not found | Run `supabase_features_migration.sql` |
 | Sign-in not working | Run `supabase_auth_migration.sql` and enable Email provider in Supabase Dashboard |

@@ -295,7 +295,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 ### Sessions — `/api/sessions`
 | Method | Path | Body | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/sessions` | `{name}` | Create session |
+| `POST` | `/api/sessions` | `{name}` | Create session; reads `Authorization` header and stamps `owner_id` if user is authenticated |
 | `GET` | `/api/sessions` | — | List sessions — auth: filter by `owner_id`; guest: filter by `?ids=` (comma-sep UUIDs stored in `localStorage`) |
 | `GET` | `/api/sessions/{id}` | — | Get single session |
 | `PATCH` | `/api/sessions/{id}` | `{name}` | Rename session |
@@ -409,12 +409,14 @@ Located in `app/routers/teams.py → _split_balanced()`.
 
 1. Separate players into **bowlers** (`can_bowl=True`) and **non-bowlers**
 2. Sort each group by skill weight descending (`expert=3, intermediate=2, beginner=1`)
-3. Snake-draft bowlers into Team A / Team B (alternating) — ensures even bowling split
-4. Snake-draft non-bowlers into Team A / Team B
+3. Snake-draft bowlers into Team A / Team B using pattern A, B, B, A, A, B, B, A… — ensures even bowling split
+4. Snake-draft non-bowlers **continuing the same pick index** (`idx`) from where the bowler draft ended — prevents the best non-bowler always landing on the same team as the best bowler
 5. Within each team, shuffle players within the same skill tier (`_tier_shuffle`)
 6. Pick one random captain per team
 7. Store `team_a_name` and `team_b_name` on every assignment row (for DB reconstruction)
 8. Delete all previous assignments for the session, insert new batch
+
+> **Previous bug:** two separate `enumerate()` loops both reset `i=0`, so the best non-bowler always went to Team A. Fixed by using a single shared `idx` across both loops.
 
 **Adding a late player** (`/teams/add_player`): creates the player in `players`, inserts one
 `team_assignments` row with `is_captain=False`, returns the full updated teams via `get_teams`.
@@ -597,6 +599,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | Multiple bottom bars stack on top of each other | `position:fixed` children escape their parent's `display:none`, so all view bottom-bars were visible simultaneously | Fixed: all `.bottom-bar` divs moved outside `.view` containers; `showView()` hides all bars then shows `#bar-{viewId}` |
 | Toss decision PATCH returns 404 | `supabase_toss_decision_migration.sql` not run — `winner_team`/`elected_to` columns missing | Run `supabase_toss_decision_migration.sql` in Supabase SQL Editor |
 | Decision panel doesn't show team names | No teams generated yet (`teamsData` is null) | Generate teams (Step 2) before going to toss — team names populate the winner buttons |
+| Sessions disappear immediately after creation when logged in | `POST /sessions` didn't read the JWT so `owner_id` was always `NULL`; `GET /sessions` for auth users filters by `owner_id` so the session was invisible | Fixed: `create_session` now reads `Authorization` header and stamps `owner_id` |
+| All experts/bowlers end up in one team | Two separate `enumerate()` loops both reset `i=0` so the best non-bowler always went to Team A alongside the best bowler | Fixed: single shared `idx` across both loops with true snake draft |
+| Expert skill pill not visibly highlighted | Used dark forest green `rgba(45,106,79)` for border/background — nearly invisible on dark UI | Fixed: updated to bright green `rgba(116,212,148)` matching the pill text color |
 
 ---
 

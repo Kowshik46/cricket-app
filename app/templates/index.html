@@ -154,9 +154,9 @@ h1 em{color:var(--gold);font-style:normal}
 .edit-skill-pills{display:flex;gap:5px}
 .edit-skill-pills button{padding:4px 10px;border-radius:6px;border:1px solid var(--cb);background:transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:.65rem;cursor:pointer;transition:all .15s}
 .edit-skill-pills button.on{font-weight:700}
-.edit-skill-pills button.on.b{background:rgba(116,178,245,.15);color:#74b2f5;border-color:rgba(116,178,245,.5)}
-.edit-skill-pills button.on.m{background:rgba(200,169,110,.18);color:#f4c842;border-color:rgba(200,169,110,.4)}
-.edit-skill-pills button.on.e{background:rgba(116,212,148,.15);color:#74d494;border-color:rgba(116,212,148,.5)}
+.edit-skill-pills button.on.b{background:rgba(116,178,245,.25);color:#74b2f5;border-color:rgba(116,178,245,.7)}
+.edit-skill-pills button.on.m{background:rgba(244,200,66,.22);color:#f4c842;border-color:rgba(244,200,66,.7)}
+.edit-skill-pills button.on.e{background:rgba(116,212,148,.22);color:#74d494;border-color:rgba(116,212,148,.7)}
 .edit-bowl-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--cb);background:transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:.65rem;cursor:pointer;transition:all .15s}
 .edit-bowl-btn.on{background:rgba(45,106,79,.22);color:#74d494;border-color:rgba(45,106,79,.5)}
 .edit-actions{display:flex;gap:6px;justify-content:flex-end}
@@ -1235,10 +1235,11 @@ function toggleEditBowl(pid){
 }
 
 function setEditSkill(pid, skill){
+  var skMap = {beginner:'b', intermediate:'m', expert:'e'};
   var btns = document.querySelectorAll('#edit-skill-' + pid + ' button');
-  btns.forEach(function(b){ b.classList.remove('on'); });
+  btns.forEach(function(b){ b.classList.remove('on','b','m','e'); });
   var target = document.querySelector('#edit-skill-' + pid + ' button[data-skill="' + skill + '"]');
-  if(target) target.classList.add('on');
+  if(target){ target.classList.add('on'); if(skMap[skill]) target.classList.add(skMap[skill]); }
 }
 
 function renderPlayers(){
