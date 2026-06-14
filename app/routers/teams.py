@@ -23,8 +23,9 @@ def _split_balanced(players: list[dict]) -> tuple[list[dict], list[dict]]:
 
     Strategy:
     1. Separate bowlers from non-bowlers.
-    2. Snake-draft bowlers by skill weight into team_a / team_b.
-    3. Snake-draft non-bowlers by skill weight into team_a / team_b.
+    2. Snake-draft bowlers by skill weight (A, B, B, A, A, B...).
+    3. Snake-draft non-bowlers continuing the SAME index — so the best
+       non-bowler goes to whichever team is next, not always Team A.
     4. Tier-shuffle within each team for variety.
     """
     bowlers     = [p for p in players if p.get("can_bowl")]
@@ -33,11 +34,19 @@ def _split_balanced(players: list[dict]) -> tuple[list[dict], list[dict]]:
     bowlers.sort(key=lambda p: SKILL_WEIGHT[p["skill"]], reverse=True)
     non_bowlers.sort(key=lambda p: SKILL_WEIGHT[p["skill"]], reverse=True)
 
+    def _goes_to_a(i: int) -> bool:
+        # Snake draft: A B B A A B B A …
+        # Round i//2 even → A picks first; odd → B picks first
+        return (i // 2 + i) % 2 == 0
+
     team_a_raw, team_b_raw = [], []
-    for i, p in enumerate(bowlers):
-        (team_a_raw if i % 2 == 0 else team_b_raw).append(p)
-    for i, p in enumerate(non_bowlers):
-        (team_a_raw if i % 2 == 0 else team_b_raw).append(p)
+    idx = 0
+    for p in bowlers:
+        (team_a_raw if _goes_to_a(idx) else team_b_raw).append(p)
+        idx += 1
+    for p in non_bowlers:
+        (team_a_raw if _goes_to_a(idx) else team_b_raw).append(p)
+        idx += 1
 
     return _tier_shuffle(team_a_raw), _tier_shuffle(team_b_raw)
 

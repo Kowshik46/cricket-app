@@ -532,6 +532,7 @@ h1 em{color:var(--gold);font-style:normal}
     <div class="share-content" id="shareText"></div>
     <div class="share-actions">
       <button class="btn-cancel" onclick="closeModal('shareModal')">Close</button>
+      <button class="btn-confirm" style="background:#25D366" onclick="shareWhatsApp()">WhatsApp</button>
       <button class="btn-confirm" onclick="copyShare()">📋 Copy</button>
     </div>
   </div>
@@ -1413,23 +1414,39 @@ function renderTeams(){
   selectTeamPick(lateTeamPick);
 }
 
-function shareTeams(){
-  if(!teamsData) return;
+function buildShareText(){
+  if(!teamsData) return '';
   var aName = teamsData.team_a_name;
   var bName = teamsData.team_b_name;
   var teamA = teamsData.assignments.filter(function(a){ return a.team_name === aName; });
   var teamB = teamsData.assignments.filter(function(a){ return a.team_name === bName; });
-
   function fmt(team, label){
     return label + ' (' + team.length + ')\n'
       + team.map(function(p){
-          return (p.is_captain?'👑 ':'   ') + p.player_name + ' [' + p.skill + (p.can_bowl?' · bowl':'') + ']';
+          return (p.is_captain ? '👑 ' : '   ') + p.player_name + ' [' + p.skill + (p.can_bowl ? ' · bowl' : '') + ']';
         }).join('\n');
   }
+  return '🏏 Cricket Teams\n\n' + fmt(teamA, '🟢 ' + aName) + '\n\n' + fmt(teamB, '🔴 ' + bName);
+}
 
-  var text = '🏏 Cricket Teams\n\n' + fmt(teamA, '🟢 ' + aName) + '\n\n' + fmt(teamB, '🔴 ' + bName);
+async function shareTeams(){
+  if(!teamsData) return;
+  var text = buildShareText();
+  if(navigator.share){
+    try {
+      await navigator.share({ text: text });
+      return;
+    } catch(e){
+      if(e.name === 'AbortError') return;
+    }
+  }
   document.getElementById('shareText').textContent = text;
   openModal('shareModal');
+}
+
+function shareWhatsApp(){
+  var text = buildShareText();
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
 async function copyShare(){
