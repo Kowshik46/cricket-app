@@ -87,12 +87,20 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   │   ├── profile.py              ← history, stats, display name, delete account
 │   │   └── matches.py              ← scorekeeping: matches, innings, ball events, undo, scorecard
 │   ├── templates/
-│   │   ├── index.html              ← main SPA (HTML + CSS + JS, no build step)
-│   │   ├── profile.html            ← profile page (account mgmt, history, stats)
-│   │   └── score.html              ← ball-by-ball scoring UI (Quick Match mode, mobile-first)
+│   │   ├── index.html              ← main SPA structure (HTML only — styles & JS in /static)
+│   │   ├── profile.html            ← profile page structure (HTML only — styles & JS in /static)
+│   │   └── score.html              ← ball-by-ball scoring UI structure (HTML only — styles & JS in /static)
 │   ├── static/
 │   │   ├── manifest.json           ← PWA manifest
-│   │   ├── sw.js                   ← service worker
+│   │   ├── sw.js                   ← service worker (cache version `cricket-v2`)
+│   │   ├── css/                    ← extracted page styles (one file per template)
+│   │   │   ├── index.css
+│   │   │   ├── profile.css
+│   │   │   └── score.css
+│   │   ├── js/                     ← extracted page scripts (one file per template, no build step)
+│   │   │   ├── index.js            ← reads window.SUPA_URL/window.SUPA_ANON injected by index.html
+│   │   │   ├── profile.js          ← reads window.SUPA_URL/window.SUPA_ANON injected by profile.html
+│   │   │   └── score.js
 │   │   └── icons/                  ← icon-192.png, icon-512.png (add manually)
 │   ├── supabase_schema.sql         ← initial table creation (run first)
 │   ├── supabase_auth_migration.sql ← adds owner_id + RLS policies (run second)
@@ -100,6 +108,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   ├── supabase_profile_migration.sql  ← creates user_profiles table (run fourth)
 │   ├── supabase_scoring_migration.sql  ← scorekeeping tables (run fifth)
 │   ├── supabase_toss_decision_migration.sql ← winner_team + elected_to columns (run sixth)
+│   ├── cricket-teams.html          ← legacy standalone HTML tool (not served by FastAPI)
 │   ├── requirements.txt
 │   ├── .gitignore
 │   └── .env.example
@@ -390,6 +399,8 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `MatchHistoryItem` | response | `id, name, created_at, team_a_name, team_b_name, players[], toss_history[]` |
 | `PlayerStatsItem` | response | `name, games, as_captain, as_bowler` |
 | `UpdateDisplayNameRequest` | request | `display_name` (min 1, max 40) |
+| `UpdateEmailRequest` | request (unused — email change is browser-side) | `email` (min 3, max 120) |
+| `UpdatePasswordRequest` | request (unused — password change is browser-side) | `password` (min 6) |
 | `MatchRules` | config | `wide_runs, wide_counts_as_ball, wide_reball, no_ball_runs, no_ball_counts_as_ball, no_ball_reball, free_hit_enabled, free_hit_dismissals, wicket_types[], last_man_standing, retirement_runs, boundary_four, boundary_six` |
 | `MatchCreate` | request | `session_id?, match_type, overs, players_per_side, rules_preset, rules?` |
 | `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, created_at` |
@@ -426,8 +437,23 @@ No reshuffling occurs.
 
 ## Frontend SPA (`app/templates/index.html`)
 
-Single file — HTML + CSS + JS. No build step. All styles are inline `<style>`, all JS is
-inline `<script>`. To add a feature: edit this file directly.
+HTML + CSS + JS — **no build step, no framework**. As of the static-asset refactor, styles and
+scripts now live in dedicated files under `app/static/`:
+
+- `app/templates/index.html` — markup only; links `<link rel="stylesheet" href="/static/css/index.css">` and `<script src="/static/js/index.js" defer>`.
+- `app/static/css/index.css` — all styles for the SPA.
+- `app/static/js/index.js` — all logic for the SPA.
+
+The same split applies to `profile.html` ↔ `profile.css`/`profile.js` and `score.html` ↔ `score.css`/`score.js`.
+
+**Jinja2 → JS handoff:** `index.html` and `profile.html` still need the server-rendered Supabase
+keys. Each template assigns them to globals in a tiny inline `<script>` block (`window.SUPA_URL` /
+`window.SUPA_ANON`) **before** loading the external JS. The external JS reads those globals at
+boot — do not move the Jinja vars into the static `.js` files (Jinja isn't applied to static assets).
+
+To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA service worker
+(`app/static/sw.js`) pre-caches all six static files at install — bump `CACHE` (currently
+`cricket-v2`) whenever you add a new top-level static asset.
 
 ### UI Structure
 | Section | ID | Description |

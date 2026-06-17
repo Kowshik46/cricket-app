@@ -1,7 +1,13 @@
-const CACHE = 'cricket-v1';
+const CACHE = 'cricket-v2';
 const SHELL = [
   '/',
   'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap',
+  '/static/css/index.css',
+  '/static/js/index.js',
+  '/static/css/score.css',
+  '/static/js/score.js',
+  '/static/css/profile.css',
+  '/static/js/profile.js',
 ];
 
 self.addEventListener('install', function(e){
