@@ -16,7 +16,7 @@
   <div class="page-header">
     <a class="btn-back" href="/">← Home</a>
     <div class="page-title">Cricket <em>Score</em></div>
-    <div style="width:60px"></div>
+    <button class="btn-share" id="btnShare" onclick="openShareModal()" style="display:none">📤 Share</button>
   </div>
 
   <!-- ══════════════════════════════════════════
@@ -87,6 +87,22 @@
         <div class="toggle"></div>
       </div>
 
+      <!-- Team-linked extras: bowler caps (hidden in quick mode) -->
+      <div id="teamLinkedExtras" style="display:none">
+        <div class="hr" style="margin-bottom:14px"></div>
+        <div style="font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Bowling Caps</div>
+        <div class="row2 fgroup">
+          <div>
+            <label class="flabel">Max overs / bowler</label>
+            <input class="finput finput-sm" type="number" id="maxBowlerOversInput" placeholder="No cap" min="1" max="50" inputmode="numeric">
+          </div>
+          <div>
+            <label class="flabel">Max throw overs / team</label>
+            <input class="finput finput-sm" type="number" id="maxThrowOversInput" placeholder="No cap" min="0" max="50" inputmode="numeric">
+          </div>
+        </div>
+      </div>
+
       <div style="height:8px"></div>
 
     </div>
@@ -98,7 +114,14 @@
   ══════════════════════════════════════════ -->
   <div class="view" id="viewScoring">
 
-    <div class="scoreboard" style="margin-top:4px">
+    <!-- Tab strip: Live | Scorecard -->
+    <div class="score-tabs" style="margin-top:4px">
+      <button class="stab on" id="tabLive" onclick="switchScoreTab('live')">🏏 Live</button>
+      <button class="stab" id="tabCard" onclick="switchScoreTab('card')">📋 Scorecard</button>
+    </div>
+
+    <div id="panelLive">
+    <div class="scoreboard">
       <div class="team-strip">
         <span class="batting-label" id="battingLabel">Team A</span>
         <span class="inn-badge first" id="innBadge">1st Inn</span>
@@ -126,6 +149,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Player-at-crease strip (team-linked only) -->
+    <div class="player-strip" id="playerStrip" style="display:none"></div>
 
     <div class="chase-bar" id="chaseBar">
       <span class="chase-txt" id="chaseTxt"></span>
@@ -170,6 +196,15 @@
       <div class="ctitle" style="font-size:.92rem;margin-bottom:8px">Over Breakdown</div>
       <div class="over-rows" id="overRows"><div class="empty">No overs yet</div></div>
     </div>
+    </div><!-- #panelLive -->
+
+    <!-- Scorecard panel (inline tab, hidden by default) -->
+    <div id="panelCard" style="display:none">
+      <div class="card" style="margin-top:4px" id="inlineScorecardContent">
+        <div class="ctitle">Scorecard</div>
+        <p style="color:var(--muted);font-family:'DM Mono',monospace;font-size:.72rem;text-align:center;padding:20px 0">No balls yet</p>
+      </div>
+    </div>
 
   </div>
 
@@ -204,8 +239,10 @@
       <div class="result-sub" id="resultSub"></div>
       <div class="hr"></div>
       <div id="resultScores"></div>
+      <div style="text-align:center;margin-top:16px">
+        <button onclick="resetToSetup()" style="background:transparent;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:.68rem;cursor:pointer;text-decoration:underline">Start fresh new match</button>
+      </div>
     </div>
-
   </div>
 
   <!-- ══════════════════════════════════════════
@@ -223,18 +260,18 @@
 </div>
 <div class="bottom-bar" id="bar-viewScoring" style="display:none">
   <button class="btnout red" onclick="confirmEndInnings()">End Innings</button>
-  <button class="btnout gold" onclick="viewScorecard()">📋 Scorecard</button>
 </div>
 <div class="bottom-bar" id="bar-viewInnBreak" style="display:none">
   <button class="btnprim" onclick="startSecondInnings()">Start 2nd Innings →</button>
 </div>
 <div class="bottom-bar" id="bar-viewResult" style="display:none">
   <a class="btnout" href="/" style="display:flex;align-items:center;justify-content:center;text-decoration:none">← Home</a>
-  <button class="btnprim" onclick="resetToSetup()">New Match</button>
+  <button class="btnout" onclick="viewFullScorecard()">📋 Scorecard</button>
+  <button class="btnprim" onclick="openPlayAgainModal()">🏏 Play Again</button>
 </div>
 <div class="bottom-bar" id="bar-viewScorecard" style="display:none">
-  <button class="btnout" onclick="backToScoring()">← Back</button>
-  <button class="btnout red" onclick="confirmEndInnings()">End Innings</button>
+  <button class="btnout" onclick="backToResult()">← Back to Result</button>
+  <button class="btnout" onclick="resetToSetup()">New Match</button>
 </div>
 
 <!-- ── WICKET MODAL ───────────────── -->
@@ -244,6 +281,13 @@
     <label class="flabel">Dismissal Type</label>
     <div class="wkt-grid" id="wktGrid"></div>
     <p id="freehitWktNote" style="font-family:'DM Mono',monospace;font-size:.68rem;color:#f4c842;margin-top:8px;display:none">🔥 Free Hit — only Run Out is allowed</p>
+    <div id="runOutEndRow" style="display:none;margin-top:12px">
+      <label class="flabel">Who was run out?</label>
+      <div class="btrow">
+        <button class="btype-btn on" id="roStrikerBtn" onclick="setRunOutTarget('striker')">🏃 Striker</button>
+        <button class="btype-btn" id="roNonStrikerBtn" onclick="setRunOutTarget('non_striker')">🏃 Non-striker</button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('wicketModal')">Cancel</button>
       <button class="btn-ok red" onclick="submitWicket()">Record Out</button>
@@ -302,8 +346,118 @@
   </div>
 </div>
 
+<!-- ── OPENING PAIR MODAL ───────── -->
+<div class="modal-bg" id="openingPairModal">
+  <div class="modal">
+    <h2 id="openingPairTitle">Opening Pair</h2>
+    <div class="fgroup">
+      <label class="flabel">Striker (faces first ball)</label>
+      <select class="finput finput-sm" id="opStrikerSel" onchange="refreshNonStrikerOpts()"></select>
+    </div>
+    <div class="fgroup">
+      <label class="flabel">Non-striker</label>
+      <select class="finput finput-sm" id="opNonStrikerSel"></select>
+    </div>
+    <div class="fgroup">
+      <label class="flabel">Opening Bowler</label>
+      <select class="finput finput-sm" id="opBowlerSel"></select>
+    </div>
+    <div class="fgroup">
+      <label class="flabel">Bowl Type</label>
+      <div class="btrow" id="opBowlTypeBtns">
+        <button class="btype-btn on" id="opBtLegal" onclick="setOpeningBowlType('legal')">🏏 Legal</button>
+        <button class="btype-btn" id="opBtThrow" onclick="setOpeningBowlType('throw')">🤾 Throw</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('openingPairModal')">Cancel</button>
+      <button class="btn-ok green" id="opSubmitBtn" onclick="submitOpeningPair()">Start Over 1</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NEW BATTER MODAL ───────────── -->
+<div class="modal-bg" id="newBatterModal">
+  <div class="modal">
+    <h2>New Batter In</h2>
+    <label class="flabel">Incoming batter</label>
+    <select class="finput finput-sm" id="newBatterSel" style="margin-bottom:14px"></select>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="cancelNewBatter()">No Change</button>
+      <button class="btn-ok green" onclick="submitNewBatter()">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NEW BOWLER MODAL ───────────── -->
+<div class="modal-bg" id="newBowlerModal">
+  <div class="modal">
+    <h2 id="newBowlerTitle">New Over</h2>
+    <label class="flabel" style="margin-bottom:8px">Pick bowler</label>
+    <div id="bowlerPickList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-bottom:12px"></div>
+    <label class="flabel">Bowl Type</label>
+    <div class="btrow" id="newBowlTypeBtns">
+      <button class="btype-btn on" id="newBtLegal" onclick="setNewBowlType('legal')">🏏 Legal</button>
+      <button class="btype-btn" id="newBtThrow" onclick="setNewBowlType('throw')">🤾 Throw</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('newBowlerModal')">Cancel</button>
+      <button class="btn-ok green" onclick="submitNewBowler()">Start Over</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PLAY AGAIN MODAL ───────────── -->
+<div class="modal-bg" id="playAgainModal">
+  <div class="modal">
+    <h2 id="paMatchNum">Match 2</h2>
+    <div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-bottom:18px" id="paTeamInfo"></div>
+
+    <div id="paTossSection">
+      <div style="text-align:center;margin-bottom:14px">
+        <div class="pa-coin" id="paCoin">🪙</div>
+      </div>
+      <button class="btn-ok" onclick="doPlayAgainToss()" style="width:100%;margin-bottom:8px;border-radius:10px">🪙 Toss for batting side</button>
+      <button onclick="document.getElementById('paTossSection').style.display='none';document.getElementById('paChooseSection').style.display=''" style="width:100%;background:transparent;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;cursor:pointer;padding:8px;text-decoration:underline">Skip — choose directly</button>
+    </div>
+
+    <div id="paChooseSection" style="display:none">
+      <div id="paTossText" style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--gold);text-align:center;margin-bottom:12px">Who bats first?</div>
+      <div class="btrow" style="gap:8px">
+        <button class="btype-btn" id="paTeam1Btn" onclick="startPlayAgain(cfg.team1)">— bats first</button>
+        <button class="btype-btn" id="paTeam2Btn" onclick="startPlayAgain(cfg.team2)">— bats first</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('playAgainModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SHARE / WATCH MODAL ────────── -->
+<div class="modal-bg" id="shareMatchModal">
+  <div class="modal">
+    <h2>📤 Share Match</h2>
+    <p style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-top:-6px;margin-bottom:16px;line-height:1.6">
+      Anyone with this code or QR can watch the live score on their phone.
+    </p>
+    <div class="share-code-display" id="shareCodeDisplay">——————</div>
+    <div id="shareQrWrap" style="display:flex;justify-content:center;margin:16px 0 10px"></div>
+    <div class="share-link-row">
+      <input class="finput finput-sm share-link-input" id="shareLinkInput" type="text" readonly>
+      <button class="btn-copy" onclick="copyShareLink()">📋</button>
+    </div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn-cancel" onclick="closeModal('shareMatchModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toastEl"></div>
 
+<!-- QRCode.js (davidshimjs) — used by the share modal -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="/static/js/score.js" defer></script>
 </body>
 </html>

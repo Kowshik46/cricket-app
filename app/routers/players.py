@@ -20,7 +20,7 @@ async def add_player(session_id: str, body: PlayerCreate):
 
     res = (
         supabase_client.table("players")
-        .insert({"session_id": session_id, "name": body.name, "skill": body.skill, "can_bowl": body.can_bowl})
+        .insert({"session_id": session_id, "name": body.name, "skill": body.skill, "can_bowl": body.can_bowl, "bowl_type": body.bowl_type})
         .execute()
     )
     if not res.data:

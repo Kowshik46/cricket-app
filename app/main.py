@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 import os
 
-from app.routers import sessions, players, teams, toss, auth, profile, matches
+from app.routers import sessions, players, teams, toss, auth, profile, matches, watch
 from app.database import supabase_client
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -39,6 +39,12 @@ app.include_router(toss.router, prefix="/api/sessions", tags=["toss"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 app.include_router(matches.router, prefix="/api/matches", tags=["matches"])
+app.include_router(watch.router, prefix="/api/watch", tags=["watch"])
+
+
+@app.get("/watch", response_class=HTMLResponse)
+async def watch_page(request: Request):
+    return templates.TemplateResponse("watch.html", {"request": request})
 
 
 @app.get("/score", response_class=HTMLResponse)

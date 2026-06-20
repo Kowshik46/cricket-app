@@ -50,6 +50,13 @@ body{
 }
 .finput:focus{border-color:var(--gold)}
 .finput::placeholder{color:rgba(253,246,227,.28)}
+select.finput,select.finput-sm{
+  appearance:none;-webkit-appearance:none;cursor:pointer;
+  color-scheme:dark;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6' fill='%23a0aab4'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 13px center;
+  padding-right:36px
+}
 .finput-sm{padding:10px 13px;font-size:.92rem}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
@@ -70,6 +77,37 @@ body{
 .toggle-row.on .toggle{background:var(--grass-l)}
 .toggle::after{content:'';position:absolute;width:15px;height:15px;border-radius:50%;background:#fff;top:3px;left:3px;transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .toggle-row.on .toggle::after{transform:translateX(15px)}
+
+/* ── score tabs ─────────────────────────────── */
+.score-tabs{
+  display:flex;gap:5px;padding:4px;
+  background:rgba(255,255,255,.04);border:1px solid var(--cb);border-radius:13px;
+  margin-bottom:10px;
+}
+.stab{
+  flex:1;padding:9px 10px;border:none;border-radius:9px;
+  background:transparent;color:var(--muted);
+  font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.4px;
+  cursor:pointer;transition:all .15s;
+}
+.stab.on{
+  background:rgba(253,246,227,.1);color:var(--cream);
+  border:1px solid rgba(253,246,227,.15);
+}
+
+/* ── play-again coin ─────────────────────────── */
+.pa-coin{
+  font-size:2.2rem;display:inline-block;
+  transition:transform .6s ease;
+}
+.pa-coin.spinning{
+  animation:coinSpin .6s ease;
+}
+@keyframes coinSpin{
+  0%{transform:rotateY(0)}
+  50%{transform:rotateY(720deg) scale(1.2)}
+  100%{transform:rotateY(1440deg)}
+}
 
 /* ── scoreboard ─────────────────────────────── */
 .scoreboard{
@@ -246,6 +284,47 @@ body{
 .result-team{font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted)}
 .result-score{font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700}
 
+/* ── player strip (team-linked) ─────────────── */
+.player-strip{
+  background:rgba(255,255,255,.035);border:1px solid var(--cb);
+  border-radius:11px;padding:9px 13px;margin-bottom:8px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.ps-batting{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ps-bowling{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);margin-top:1px}
+.ps-player{font-family:'DM Mono',monospace;font-size:.78rem;color:var(--cream)}
+.ps-striker{font-weight:700}
+.ps-stat{color:var(--muted);font-size:.68rem;margin-left:2px}
+.ps-sep{color:rgba(253,246,227,.2);font-size:.7rem}
+.ps-bowler{color:#74b2f5;font-family:'DM Mono',monospace;font-size:.72rem}
+.ps-bowlstat{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);margin-left:6px}
+
+/* ── bowl-type buttons (modals) ─────────────── */
+.btrow{display:flex;gap:8px;margin-top:4px}
+.btype-btn{
+  flex:1;padding:10px 6px;border-radius:9px;
+  border:1px solid var(--cb);background:transparent;
+  color:var(--muted);font-family:'DM Mono',monospace;font-size:.72rem;
+  cursor:pointer;transition:all .15s;
+}
+.btype-btn.on{
+  background:rgba(74,144,226,.15);border-color:rgba(74,144,226,.5);color:#74b2f5;
+}
+
+/* ── bowler pick list (new-bowler modal) ─────── */
+.bowler-pick-btn{
+  width:100%;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--cb);background:transparent;
+  color:var(--cream);font-family:'DM Mono',monospace;font-size:.78rem;
+  cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:space-between;text-align:left;
+}
+.bowler-pick-btn.on{background:rgba(45,106,79,.2);border-color:rgba(45,106,79,.6);color:#74d494}
+.bowler-pick-btn:disabled{opacity:.4;cursor:not-allowed}
+.bp-name{flex:1}
+.bp-info{font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted)}
+.bp-blocked{font-family:'DM Mono',monospace;font-size:.6rem;color:#f08080;margin-left:6px}
+
 /* ── misc ────────────────────────────────────── */
 .empty{text-align:center;padding:16px 0;color:var(--muted);font-size:.75rem;font-family:'DM Mono',monospace}
 .toast{
@@ -261,3 +340,66 @@ body{
 }
 .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 .toast.error{background:rgba(140,20,20,.96)}
+
+/* ── native <select> option colours ─────────── */
+option{background:#0e1c28;color:var(--cream)}
+
+/* ── over-row runs tally ─────────────────────── */
+.ov-runs{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);flex-shrink:0;margin-left:4px}
+
+/* ── classic scorecard tables ───────────────── */
+.sc-section{margin-bottom:14px}
+.sc-hdr{
+  font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:1.4px;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--cb)
+}
+.sc-table{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace}
+.sc-table th{
+  font-size:.58rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);
+  padding:0 4px 7px;text-align:right;font-weight:400
+}
+.sc-table th:first-child{text-align:left;padding-left:0}
+.sc-table td{
+  font-size:.78rem;padding:6px 4px;
+  border-bottom:1px solid rgba(253,246,227,.04);
+  color:var(--cream);text-align:right;vertical-align:top
+}
+.sc-table td:first-child{text-align:left;padding-left:0;max-width:140px}
+.sc-table tr:last-child td{border-bottom:none}
+.sc-not-out{color:#74d494}
+.sc-dis{font-size:.6rem;color:var(--muted);display:block;margin-top:2px;text-transform:capitalize}
+
+/* ── share button (page header) ────────────── */
+.btn-share{
+  background:transparent;border:1px solid var(--cb);color:var(--muted);
+  padding:6px 11px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.7rem;
+  cursor:pointer;transition:all .15s;
+}
+.btn-share:hover{border-color:var(--gold);color:var(--gold)}
+
+/* ── share modal content ────────────────────── */
+.share-code-display{
+  text-align:center;
+  font-family:'DM Mono',monospace;
+  font-size:2.4rem;
+  font-weight:700;
+  letter-spacing:8px;
+  color:var(--gold);
+  background:rgba(244,200,66,.07);
+  border:1.5px solid rgba(244,200,66,.25);
+  border-radius:12px;
+  padding:14px 0;
+  margin-bottom:4px;
+}
+.share-link-row{display:flex;gap:6px;align-items:center}
+.share-link-input{
+  flex:1;font-size:.72rem;letter-spacing:0;padding:9px 10px;
+  color:var(--muted);cursor:default;
+}
+.btn-copy{
+  flex-shrink:0;background:var(--cb);border:1px solid var(--cb);
+  color:var(--cream);border-radius:8px;padding:9px 13px;cursor:pointer;font-size:.85rem;
+}
+.btn-copy:active{opacity:.7}
+

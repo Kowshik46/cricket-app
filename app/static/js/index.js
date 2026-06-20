@@ -22,7 +22,9 @@ var lastTossId = null;
 var tossWinner = null;    // 'a' or 'b'
 var currentUser = null;
 var canBowl = false;         // step-1 add-player toggle
+var bowlType = 'legal';      // step-1 bowl type ('legal' | 'throw')
 var lateCanBowl = false;     // step-2 late-player toggle
+var lateBowlType = 'legal';  // step-2 bowl type
 var lateTeamPick = 'a';      // which team the late player goes to
 
 var LS_KEY = 'cricket_last_session';
@@ -535,7 +537,7 @@ async function addPlayer(){
   var skill = getSkill();
   loading(true);
   try {
-    var p = await api('POST', '/sessions/' + currentSessionId + '/players', { name: name, skill: skill, can_bowl: canBowl });
+    var p = await api('POST', '/sessions/' + currentSessionId + '/players', { name: name, skill: skill, can_bowl: canBowl, bowl_type: bowlType });
     players.push(p);
     document.getElementById('nameInput').value = '';
     document.getElementById('nameInput').focus();
@@ -593,11 +595,16 @@ async function savePlayerEdit(pid){
   var bowlBtn = document.getElementById('edit-bowl-' + pid);
   var can_bowl = bowlBtn ? bowlBtn.classList.contains('on') : false;
 
+  // read bowl type
+  var bowlTypeBtn = document.getElementById('edit-bowl-type-' + pid);
+  var bowl_type = bowlTypeBtn ? (bowlTypeBtn.classList.contains('on') ? 'throw' : 'legal') : 'legal';
+
   var orig = players.find(function(p){ return p.id === pid; });
   var updates = {};
   if(name !== orig.name) updates.name = name;
   if(skill && skill !== orig.skill) updates.skill = skill;
   if(can_bowl !== orig.can_bowl) updates.can_bowl = can_bowl;
+  if(bowl_type !== (orig.bowl_type || 'legal')) updates.bowl_type = bowl_type;
 
   if(!Object.keys(updates).length){
     _editingPlayerId = null;
@@ -623,6 +630,13 @@ async function savePlayerEdit(pid){
 function toggleEditBowl(pid){
   var btn = document.getElementById('edit-bowl-' + pid);
   if(btn) btn.classList.toggle('on');
+}
+
+function toggleEditBowlType(pid){
+  var btn = document.getElementById('edit-bowl-type-' + pid);
+  if(!btn) return;
+  btn.classList.toggle('on');
+  btn.textContent = btn.classList.contains('on') ? '🤾 Throw' : '🏏 Legal';
 }
 
 function setEditSkill(pid, skill){
@@ -675,6 +689,8 @@ function renderPlayers(){
         + '</div>'
         + '<button class="edit-bowl-btn' + (p.can_bowl?' on':'') + '" id="edit-bowl-' + p.id + '" onclick="toggleEditBowl(\'' + p.id + '\')">'
         + (p.can_bowl ? '🏏 Bowl' : '🏏 Bowl?') + '</button>'
+        + '<button class="edit-bowl-type-btn' + (p.bowl_type==='throw'?' on':'') + '" id="edit-bowl-type-' + p.id + '" onclick="toggleEditBowlType(\'' + p.id + '\')">'
+        + (p.bowl_type === 'throw' ? '🤾 Throw' : '🏏 Legal') + '</button>'
         + '</div>'
         + '<div class="edit-actions">'
         + '<button class="btn-cancel-sm" onclick="cancelPlayerEdit()">Cancel</button>'
@@ -682,7 +698,7 @@ function renderPlayers(){
         + '</div>'
         + '</div>';
     } else {
-      var roleLabel = p.can_bowl ? 'Bat &amp; Bowl' : 'Bat';
+      var roleLabel = p.can_bowl ? (p.bowl_type === 'throw' ? 'Bat &amp; Throw' : 'Bat &amp; Bowl') : 'Bat';
       html += '<div class="ptag" id="ptag-' + p.id + '">'
         + '<div class="pleft"><span class="pname">' + esc(p.name) + '</span>'
         + '<span class="sbadge sb-' + p.skill + '">' + p.skill + '</span>'
@@ -858,10 +874,24 @@ function toggleBowl(){
   document.getElementById('bowlToggle').classList.toggle('on', canBowl);
 }
 
+// ─── Bowl type picker (step 1) ───────────────────────────────────────────────
+function setBowlType(val){
+  bowlType = val;
+  document.getElementById('btLegal').classList.toggle('on', val === 'legal');
+  document.getElementById('btThrow').classList.toggle('on', val === 'throw');
+}
+
 // ─── Late-player bowl toggle (step 2) ────────────────────────────────────────
 function toggleLateBowl(){
   lateCanBowl = !lateCanBowl;
   document.getElementById('lateBowlToggle').classList.toggle('on', lateCanBowl);
+}
+
+// ─── Bowl type picker (step 2) ───────────────────────────────────────────────
+function setLateBowlType(val){
+  lateBowlType = val;
+  document.getElementById('lbtLegal').classList.toggle('on', val === 'legal');
+  document.getElementById('lbtThrow').classList.toggle('on', val === 'throw');
 }
 
 // ─── Add-player panel (step 2) ───────────────────────────────────────────────
@@ -901,14 +931,16 @@ async function addLatePlayer(){
   loading(true);
   try {
     teamsData = await api('POST', '/sessions/' + currentSessionId + '/teams/add_player', {
-      name: name, skill: skill, can_bowl: lateCanBowl, team_name: teamName
+      name: name, skill: skill, can_bowl: lateCanBowl, bowl_type: lateBowlType, team_name: teamName
     });
     // Also add to local players list so step 1 stays in sync
     var pRes = await api('GET', '/sessions/' + currentSessionId + '/players');
     players = pRes;
     document.getElementById('latePlayerName').value = '';
     lateCanBowl = false;
+    lateBowlType = 'legal';
     document.getElementById('lateBowlToggle').classList.remove('on');
+    setLateBowlType('legal');
     renderTeams();
     toast(name + ' added to ' + teamName + '!');
   } catch(e){
@@ -1066,6 +1098,36 @@ function goToScore(){
   window.location.href = '/score?' + params.toString();
 }
 
+async function goToTeamScore(){
+  if(!currentSessionId){ toast('Select a match first', true); return; }
+  if(!teamsData){ toast('Generate teams first', true); return; }
+  try {
+    var playersA = teamsData.assignments
+      ? teamsData.assignments.filter(function(a){ return a.team_name === teamsData.team_a_name; })
+      : [];
+    var playersPerSide = playersA.length || 6;
+    var match = await api('POST', '/matches', {
+      session_id: currentSessionId,
+      match_type: 'team',
+      overs: 6,
+      players_per_side: playersPerSide,
+      rules_preset: 'custom',
+      rules: {
+        wide_runs:1, wide_counts_as_ball:false, wide_reball:true,
+        no_ball_runs:1, no_ball_counts_as_ball:false, no_ball_reball:true,
+        free_hit_enabled:true, free_hit_dismissals:'run_out',
+        wicket_types:['bowled','caught','run_out','lbw','stumped','hit_wicket'],
+        last_man_standing:false, retirement_runs:null,
+        boundary_four:4, boundary_six:6,
+        max_overs_per_bowler:null, max_throw_overs_per_team:null,
+      },
+    });
+    window.location.href = '/score?match_id=' + match.id + '&session=' + currentSessionId;
+  } catch(e) {
+    toast(e.message || 'Failed to create match', true);
+  }
+}
+
 // ─── Confirm helpers ──────────────────────────────────────────────────────────
 function confirmNewMatch(){
   document.getElementById('confirmTitle').textContent = 'New Match?';
@@ -1162,6 +1224,19 @@ function esc(s){
 function fmtDate(iso){
   var d = new Date(iso);
   return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+}
+
+// ─── Follow Match ─────────────────────────────────────────────────────────────
+function openFollowMatchModal() {
+  document.getElementById('followMatchCode').value = '';
+  openModal('followMatchModal');
+  setTimeout(function(){ document.getElementById('followMatchCode').focus(); }, 120);
+}
+
+function goToWatch() {
+  var code = (document.getElementById('followMatchCode').value || '').trim().toUpperCase();
+  if (code.length < 4) { toast('Enter the match code first'); return; }
+  window.location.href = '/watch?code=' + encodeURIComponent(code);
 }
 
 // ─── Service Worker ───────────────────────────────────────────────────────────

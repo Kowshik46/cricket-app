@@ -1,774 +1,342 @@
-# Cricket Team Maker – Scorekeeping & Match Management Feature
+# Team-Linked Scorekeeping — Action Plan
 
-## Overview
+> **Status:** Plan v1 — ready to build. Trigger from a fresh chat by referencing this file.
+> **Created:** 2026-06-18
 
-The application is evolving from a Cricket Team Generator into a complete Cricket Match Manager.
+Comprehensive, self-contained plan based on four confirmed product decisions:
 
-The existing functionality must remain fully intact.
-
-The new feature introduces a comprehensive Scorekeeping system that supports:
-
-1. Team Generation only
-2. Scorekeeping only
-3. Team Generation + Toss + Scorekeeping
-4. Gully Cricket
-5. Box Cricket
-6. Corporate Cricket
-7. Standard Cricket
-
-The system must be designed so that scorekeeping is NOT dependent on team generation.
+- **Both modes coexist** — `/score` standalone stays as-is for ad-hoc Quick Score; new rich mode is opened only via the Players → Teams → Toss → Score path.
+- **Throw bowling = per-over choice** at bowler-pick time, counted toward a per-team cap.
+- **Full standard cricket rules** for rotation, consecutive-over bowling, and bowler-overs cap (hard enforce).
+- **Per-match rules** configured in Setup (no global defaults). User sets `max_overs_per_bowler` and `max_throw_overs_per_team` fresh each match.
 
 ---
 
-# Existing Flow
+## 1. Goals & scope
 
-Current application flow:
+1. New entry point: **`/score?match_id=<id>`** with full team context (or new route `/play/<session_id>`).
+2. Pre-play setup modal: pick opening **striker**, **non-striker**, **opening bowler** + **bowl type (legal | throw)** for over 1.
+3. Live scoring with **per-ball batter/bowler attribution** stored on `ball_events`.
+4. **Automatic striker rotation** (odd runs / end-of-over) — derived from the ball timeline + opening pair.
+5. **Wicket → new-batter modal** that picks the incoming batter from remaining team members.
+6. **Over-end → new-bowler modal** that picks bowler + bowl type, gated by:
+   - cannot pick the bowler who just finished the previous over
+   - cannot pick a bowler who has hit `max_overs_per_bowler`
+   - cannot pick "throw" if team has hit `max_throw_overs_per_team`
+7. **Per-match config** for the two new caps, plus per-player **default `bowl_type`** captured at team-generation time but overridable per over.
+8. **Player-level stats** (runs/balls/4s/6s/SR for batters; overs/runs/wkts/economy for bowlers) computed from the timeline and shown on the live scorecard.
 
-Create Session
-→ Add Players
-→ Generate Teams
-→ Toss
-
-This flow should continue working exactly as it does today.
-
----
-
-# New Match Flows
-
-## Flow A – Existing Team Generator + Scorekeeping
-
-Create Session
-→ Add Players
-→ Generate Teams
-→ Toss
-→ Scorekeeping
+Out of scope for v1: substitutions/retired hurt, fielding stats (catches/run-outs), wagon wheels, partnership tracking.
 
 ---
 
-## Flow B – Quick Scorekeeping
+## 2. UX flow (rich mode)
 
-Create Session
-→ Start Scorekeeping
-
-No players required.
-
-No team generation required.
-
-No toss required.
-
-This is intended for quick tracking of local matches where users only care about runs, wickets, and overs.
-
----
-
-# Core Design Principle
-
-Scorekeeping must be a first-class feature.
-
-The application should support:
-
-* Team Generator only
-* Scorekeeper only
-* Team Generator + Scorekeeper
-
-without requiring separate applications.
-
----
-
-# Match Setup
-
-When the user starts scoring, create a Match Setup screen.
-
----
-
-## Match Name
-
-Default:
-
-Session Name
-
-Editable.
-
----
-
-## Match Type
-
-Options:
-
-* Team Match
-* Quick Match
-
-Definitions:
-
-### Team Match
-
-Uses generated teams.
-
-Tracks:
-
-* Batters
-* Bowlers
-* Player statistics
-
-### Quick Match
-
-No player tracking.
-
-Tracks:
-
-* Score
-* Wickets
-* Overs
-* Ball events
-
-only.
-
----
-
-# Match Format
-
-Allow configuration of:
-
-* 4 Overs
-* 5 Overs
-* 6 Overs
-* 8 Overs
-* 10 Overs
-* 12 Overs
-* 15 Overs
-* 20 Overs
-* Custom Overs
-
----
-
-## Players Per Side
-
-Options:
-
-* 5
-* 6
-* 7
-* 8
-* 10
-* 11
-* Custom
-
----
-
-# Rules Engine
-
-IMPORTANT:
-
-No scoring logic should contain hardcoded cricket rules.
-
-Everything must be driven by configuration.
-
-Bad:
-
-```python
-if event == "wide":
-    score += 1
-    reball = True
+```
+Step 1 Players ─┐
+Step 2 Teams    │  unchanged
+Step 3 Toss     │
+                ↓
+[Toss decision saved with elected_to=bat|field]
+                ↓
+"🏏 Score →" button on toss screen creates a Match
+                ↓
+NEW Step 4: Match Setup screen (lives in /score?match_id=<id>)
+  - Read-only: team names (from teams), batting order (from toss winner)
+  - Overs, players/side (locked to team size), max wickets
+  - Rules toggles (wide/no-ball/free-hit) — unchanged
+  - NEW: Max overs per bowler         [int input]
+  - NEW: Max throw overs per team     [int input]
+  - "Start Innings 1 →"
+                ↓
+NEW Opening Pair Modal:
+  - Striker          [dropdown of batting team players]
+  - Non-striker      [dropdown, excludes striker]
+  - Opening Bowler   [dropdown of bowling team players who have can_bowl=true]
+  - Bowl type        [Legal | Throw]
+  - "Start Over 1"
+                ↓
+Scoring view (existing run-grid + event-grid) — additions:
+  - Header: "Striker: NAME (R*/B) | Non-striker: NAME (R/B)"
+  - Bowler line: "Bowler: NAME · Over 1.3 · This over: 2-0-4-0"
+  - Each ball click → POST with batter_id=striker, bowler_id=current
+  - Automatic striker swap on odd runs (1/3/5/byes/lb), end of over swap
+                ↓
+On wicket event → NEW New-Batter Modal:
+  - Dropdown of remaining batters (team minus already-batted minus current non-striker)
+  - "Continue"
+                ↓
+End of over (6 legal balls) → NEW New-Bowler Modal:
+  - Eligible bowlers list (filters out previous-over bowler + capped bowlers)
+  - Bowl type [Legal | Throw] (Throw disabled if team cap hit)
+  - "Start Over N+1"
+                ↓
+Innings ends (all out / overs done) → existing innings-break screen
+  (target computed) → Opening Pair Modal for innings 2 → loop
 ```
 
-Good:
+Standalone Quick Score (no `match_id` query param) stays exactly as it is today — no batter/bowler prompts, no caps, no rotation. The `score.js` file branches at boot on `URLSearchParams.has('match_id')`.
+
+---
+
+## 3. Data model changes
+
+### 3a. New migration: `supabase_team_score_migration.sql`
+
+```sql
+-- 1. Opening pair on innings
+ALTER TABLE innings
+  ADD COLUMN opening_striker_id     uuid NULL REFERENCES players(id) ON DELETE SET NULL,
+  ADD COLUMN opening_non_striker_id uuid NULL REFERENCES players(id) ON DELETE SET NULL;
+
+-- 2. Per-over bowler + bowl type
+CREATE TABLE innings_overs (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  innings_id   uuid NOT NULL REFERENCES innings(id) ON DELETE CASCADE,
+  over_number  integer NOT NULL,
+  bowler_id    uuid NULL REFERENCES players(id) ON DELETE SET NULL,
+  bowl_type    text NOT NULL DEFAULT 'legal'
+               CHECK (bowl_type IN ('legal','throw')),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (innings_id, over_number)
+);
+ALTER TABLE innings_overs DISABLE ROW LEVEL SECURITY;
+
+-- 3. Players (default bowl type, used to pre-select in modal)
+ALTER TABLE players
+  ADD COLUMN bowl_type text NOT NULL DEFAULT 'legal'
+             CHECK (bowl_type IN ('legal','throw'));
+```
+
+### 3b. `MatchRules` Pydantic schema additions (`app/models.py`)
 
 ```python
-score += rules.wide_runs
-reball = rules.wide_reball
+class MatchRules(BaseModel):
+    # ... existing fields ...
+    max_overs_per_bowler: int | None = None       # None = no cap
+    max_throw_overs_per_team: int | None = None   # None = no cap (or 0 = no throws)
+```
+
+`max_overs_per_bowler` and `max_throw_overs_per_team` live inside `match_rules.rules_json` — no separate columns needed (the table already stores arbitrary rules as JSONB).
+
+### 3c. New / extended Pydantic models
+
+| Model | Direction | Fields |
+|-------|-----------|--------|
+| `PlayerCreate` / `PlayerUpdate` / `PlayerOut` | request/response | + `bowl_type: Literal['legal','throw'] = 'legal'` |
+| `InningsCreate` | request | + `opening_striker_id`, `opening_non_striker_id` (both required when match.match_type == 'team') |
+| `InningsOut` | response | + `opening_striker_id`, `opening_non_striker_id` |
+| `OverAssignmentCreate` | request | `bowler_id`, `bowl_type` |
+| `OverAssignmentOut` | response | `over_number, bowler_id, bowl_type` |
+| `BatterStats` | response | `player_id, name, runs, balls, fours, sixes, strike_rate, status` (`'batting' \| 'out' \| 'not_out' \| 'yet_to_bat'`), `dismissal: str \| None` |
+| `BowlerStats` | response | `player_id, name, overs, balls_legal, runs_conceded, wickets, economy, throw_overs, legal_overs` |
+| `InningsScorecard` | response | + `batters: list[BatterStats]`, `bowlers: list[BowlerStats]`, `current_striker_id`, `current_non_striker_id`, `current_bowler_id`, `current_over_number` |
+
+---
+
+## 4. Backend changes
+
+### 4a. New endpoints
+
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/matches/{id}/innings/{inn_id}/overs` | `OverAssignmentCreate` | Assign bowler + bowl_type to the next over. Validates: not the previous bowler, bowler not capped, throw_type allowed within team cap. Returns `OverAssignmentOut`. |
+| `GET`  | `/api/matches/{id}/innings/{inn_id}/overs` | — | List all over assignments for that innings. |
+| `GET`  | `/api/matches/{id}/innings/{inn_id}/eligible_bowlers?for_over=N` | — | Returns `{bowlers: [{id, name, overs_bowled, throw_overs_bowled, can_legal, can_throw, reason_blocked}]}`. Drives the over-change modal. |
+| `GET`  | `/api/matches/{id}/innings/{inn_id}/eligible_batters` | — | Returns batters who haven't been dismissed and aren't already at the crease. Drives the new-batter modal. |
+
+### 4b. Modified endpoints
+
+- `POST /api/matches/{id}/innings` — when match is team-linked, requires the opening pair IDs in the body; persists them. For quick mode, fields are optional and may be null.
+- `POST /api/matches/{id}/innings/{inn_id}/ball` —
+  - validates `batter_id` matches the derived current striker
+  - validates `bowler_id` matches the current over's assigned bowler
+  - (these checks only fire when the match is team-linked; quick mode skips)
+- `GET /api/matches/{id}/innings/{inn_id}/scorecard` — additionally computes:
+  - current striker / non-striker / bowler IDs (from opening pair + ball event timeline + over assignments)
+  - per-batter and per-bowler aggregates
+- `POST /api/matches/{id}/innings/{inn_id}/undo` — already deletes the last ball; after the timeline change, the derived current state automatically rolls back. No extra work.
+
+### 4c. Derivation logic (lives in `app/routers/matches.py`)
+
+Pure function `derive_innings_state(innings, ball_events, over_assignments)`:
+
+1. **Start**: striker = `opening_striker_id`, non_striker = `opening_non_striker_id`.
+2. For each ball in order:
+   - if `event_type` ∈ `('wide','no_ball')` and not paired with byes/runs → no rotation, ball doesn't count toward over.
+   - if `event_type == 'wicket'` → striker becomes the new batter on the *next* ball (read from next ball's `batter_id`); if it's the last ball, leave striker null (innings ended).
+   - if `runs` is odd → swap striker & non-striker.
+   - if this ball completes 6 legal balls in the current over → swap striker & non-striker AND advance current_over_number, set current_bowler_id from `over_assignments[current_over_number]`.
+3. Return `(current_striker_id, current_non_striker_id, current_bowler_id, current_over_number)`.
+
+Per-batter aggregate: walk balls, group by `batter_id`.
+Per-bowler aggregate: walk balls, group by `bowler_id`, also enrich from `over_assignments` for throw/legal counts.
+
+### 4d. Cap-enforcement helpers
+
+- `bowler_overs_count(innings_id, bowler_id) -> int`: count distinct over_numbers in `innings_overs` for that bowler in that innings.
+- `team_throw_overs_count(innings_id) -> int`: count rows in `innings_overs` where `bowl_type='throw'`.
+- Validation chain in `POST /overs`:
+  1. `for_over` must equal `next expected over number` (overs % 6 == 0 of legal balls).
+  2. Previous over's bowler_id ≠ new bowler_id.
+  3. `bowler_overs_count + 1 ≤ max_overs_per_bowler` (if cap set).
+  4. If `bowl_type='throw'`, `team_throw_overs_count + 1 ≤ max_throw_overs_per_team`.
+
+---
+
+## 5. Frontend changes
+
+### 5a. New route handling in `score.js`
+
+Boot sequence detects mode:
+
+```js
+const params = new URLSearchParams(location.search);
+const matchId = params.get('match_id');         // already-created match
+const sessionId = params.get('session');         // existing param
+const isTeamLinked = !!matchId;                  // new flag
+```
+
+If `isTeamLinked`:
+- Skip the existing Setup view (settings come from the existing match).
+- Fetch `/api/matches/{matchId}`, `/api/matches/{matchId}/rules`, players/teams from the session.
+- Show **Opening Pair Modal** before the scoring view loads.
+- After opening pair submitted, POST innings + opening pair + over-1 assignment, then transition to scoring view.
+
+### 5b. New UI components in `score.html`
+
+1. **Opening Pair Modal** (`#openingPairModal`)
+   - Striker `<select>` populated from batting team
+   - Non-striker `<select>` (excludes striker via JS)
+   - Bowler `<select>` populated from bowling team (only `can_bowl=true`)
+   - Bowl type radio: Legal | Throw (Throw disabled if cap will be exceeded)
+   - "Start Over 1"
+
+2. **New-Batter Modal** (`#newBatterModal`)
+   - Fired after a ball event whose `event_type === 'wicket'`
+   - Dropdown built from `GET /eligible_batters`
+   - "Continue" stores `pendingBatterId` on frontend state; the next ball POST carries it as `batter_id`
+
+3. **New-Bowler Modal** (`#newBowlerModal`)
+   - Fired when ball completes the 6th legal of an over AND match isn't over
+   - Dropdown built from `GET /eligible_bowlers?for_over=N+1`
+   - Each option shows: name + `Xov` + `🏏 legal` / `🔥 throw N/max`
+   - Disabled options: previous bowler, capped bowlers
+   - Bowl type radio with disabled-throw indicator
+   - "Start Over N+1" → POST `/overs` then resume scoring
+
+4. **Scoring view header changes** (`#viewScoring`)
+   - Replace team-strip with: **Batting line** showing striker (with `*`) + non-striker (runs/balls)
+   - Add **Bowler line** under it: `Bowler: NAME · ov 2.3 · this over: 1·2·W·`
+   - Existing scoreboard/RR/target/freehit stays as-is
+
+5. **Scorecard view** (`#viewScorecard`)
+   - Add **Batting table**: Name · R · B · 4s · 6s · SR · Status
+   - Add **Bowling table**: Name · O · M · R · W · Econ · (Throw/Legal split)
+   - Existing ball-by-ball breakdown stays below
+
+### 5c. Frontend state additions
+
+```js
+// Existing matchState gains:
+matchState.battingTeamPlayers   // [{id, name, can_bowl, bowl_type}]
+matchState.bowlingTeamPlayers
+matchState.currentStrikerId
+matchState.currentNonStrikerId
+matchState.currentBowlerId
+matchState.currentOverNumber
+matchState.pendingBatterId      // set after wicket modal, consumed on next ball
+matchState.openingPair          // set once, used to recompute after undo
+```
+
+After each successful `postBall`, the response (`InningsScorecard`) now includes the derived `current_*` IDs — frontend syncs from server, no local recomputation needed (server is the source of truth).
+
+### 5d. Index → Score handoff
+
+In `index.js → goToScore()`, when the user is on the toss step with teams generated, change the URL builder:
+
+```js
+// OLD:
+window.location.href = '/score?' + params.toString();
+
+// NEW:
+// 1. POST /api/matches with session_id, match_type='team', overs (default 6 — can be changed in Setup), rules from defaults
+// 2. Redirect to /score?match_id=<new_match.id>
+```
+
+The Setup view in `score.html` is still used for team-linked matches — but it pre-fills from the match record and locks team names; the user only adjusts overs/wickets/rules. After Setup submit, the Opening Pair Modal opens.
+
+---
+
+## 6. Implementation order (phased — each phase ships independently)
+
+### Phase 1 — Schema & quiet plumbing (no UI change)
+1. Write & apply `supabase_team_score_migration.sql`.
+2. Add `bowl_type` to `PlayerCreate/Update/Out` and to Step-1 / Step-2 "Add Player" forms (small chip: 🏏 Legal | 🤾 Throw — defaults Legal).
+3. Add `max_overs_per_bowler` and `max_throw_overs_per_team` to `MatchRules` model (optional, default None).
+4. Add `opening_striker_id` / `opening_non_striker_id` to `InningsCreate` / `InningsOut` (optional for now).
+5. Add `innings_overs` table CRUD plumbing (`POST` / `GET` endpoints), unused by the UI yet.
+6. Update `CLAUDE.md` schema and Pydantic tables.
+
+### Phase 2 — Derivation engine
+1. Implement `derive_innings_state` + per-batter / per-bowler aggregators in `matches.py`.
+2. Extend `GET /scorecard` to include the new fields. Existing quick-score frontend ignores them.
+3. Implement eligible-bowlers / eligible-batters endpoints.
+4. Add cap validation to `POST /overs`.
+
+### Phase 3 — Team-linked frontend
+1. Add the `isTeamLinked` branch in `score.js` boot.
+2. Build the Opening Pair Modal + new-batter modal + new-bowler modal.
+3. Wire `index.js → goToScore()` to create a match server-side and redirect with `?match_id=`.
+4. Update Setup screen in `score.html` to lock team names + show the two new rule inputs (only when team-linked).
+5. Add live striker/non-striker/bowler indicators to the scoring header.
+6. Update `postBall` calls to send `batter_id` (current striker) and `bowler_id` (current bowler).
+
+### Phase 4 — Scorecard polish
+1. Add batter & bowler tables to `#viewScorecard`.
+2. Update profile/history page to show batter / bowler stats per innings for team-linked matches.
+
+### Phase 5 — Docs & SW bump
+1. Update `CLAUDE.md`: new tables, new endpoints, new model fields, new UI sections.
+2. Bump `sw.js` cache to `cricket-v3` (since `score.css` / `score.js` change shape).
+3. Update README user-facing notes.
+
+---
+
+## 7. Open decisions to confirm at build start
+
+These are intentionally **deferred** so the plan is not blocked. Lock them in at the start of the build chat.
+
+1. **Throw-overs cap semantics**: is the cap a *subset of* a bowler's overs (e.g. bowler can bowl 3 ov, of which max 1 is throw — bowler-level cap), or *team total throw overs* only (no bowler-level throw cap)? Plan currently assumes **team total only**.
+2. **Same bowler consecutive ban** — strict cricket forbids this. Plan enforces it. Want to allow override?
+3. **End-of-innings stop conditions** — already handled (all out / overs done / target chased). Should "all out" use `players_per_side − 1` (last man standing) or the explicit `maxWickets` setting? Plan uses `maxWickets` from Setup, same as today.
+4. **Player `bowl_type` default in Add Player UI**: pill (`Legal` / `Throw`) appears only if `can_bowl=true`. Confirm UX.
+5. **Edit-on-the-fly**: should the scorer be able to *change* the current bowler mid-over (e.g. injury)? Plan says **no** — bowler is locked once an over starts. Override via Undo all balls of the over instead.
+6. **Index `goToScore()` — overs default**: when creating the match server-side, what default `overs` value? Plan suggests 6 (same as today's query-param). User can change in Setup.
+7. **Migration order in `CLAUDE.md`**: this is migration #7. Confirm naming `supabase_team_score_migration.sql`.
+
+---
+
+## 8. Files that will change
+
+```
+NEW   app/supabase_team_score_migration.sql
+EDIT  app/models.py
+EDIT  app/routers/players.py        (bowl_type field on Add/Update)
+EDIT  app/routers/matches.py        (new endpoints, derivation engine, validators)
+EDIT  app/templates/index.html      (Add Player bowl-type pill, late-add bowl-type pill)
+EDIT  app/static/css/index.css      (new pill styles)
+EDIT  app/static/js/index.js        (bowl_type state, goToScore creates match)
+EDIT  app/templates/score.html      (3 new modals, new header, scorecard tables, 2 new rule inputs)
+EDIT  app/static/css/score.css      (modal & header styles)
+EDIT  app/static/js/score.js        (isTeamLinked branch, derivation sync, modals, rotation)
+EDIT  app/templates/profile.html    (batter/bowler stats in history)
+EDIT  app/static/css/profile.css
+EDIT  app/static/js/profile.js
+EDIT  app/static/sw.js              (bump cache to cricket-v3)
+EDIT  CLAUDE.md                     (schema, endpoints, models, frontend sections, common issues)
 ```
 
 ---
 
-# Rules Presets
-
-Provide presets.
-
-## Standard Cricket
-
-Wide:
-+1 run
-Re-ball
-
-No Ball:
-+1 run
-Re-ball
-Free Hit
-
----
-
-## Box Cricket
-
-Wide:
-+1 run
-Counts as ball
-
-No Ball:
-+1 run
-Counts as ball
-
-Free Hit:
-Disabled
-
----
-
-## Gully Cricket
-
-Venue-dependent.
-
-All settings editable.
-
----
-
-## Custom
-
-Everything configurable.
-
----
-
-# Wide Ball Rules
-
-Configurable:
-
-wide_runs
-
-Options:
-
-0
-1
-2
-Custom
-
----
-
-wide_counts_as_ball
-
-true
-false
-
----
-
-wide_reball
-
-true
-false
-
----
-
-# No Ball Rules
-
-Configurable:
-
-no_ball_runs
-
-0
-1
-2
-Custom
-
----
-
-no_ball_counts_as_ball
-
-true
-false
-
----
-
-no_ball_reball
-
-true
-false
-
----
-
-free_hit_enabled
-
-true
-false
-
----
-
-# Free Hit Rules
-
-Configurable.
-
-Options:
-
-Enabled
-Disabled
-
-Dismissal Rules:
-
-* No dismissal
-* Run out only
-* Run out + Stumping
-* All dismissals
-
----
-
-# Wicket Rules
-
-Allow enabling/disabling:
-
-* Bowled
-* Caught
-* Run Out
-* LBW
-* Stumping
-* Hit Wicket
-
----
-
-# Last Man Standing
-
-Common in gully cricket.
-
-Configurable:
-
-Enabled
-Disabled
-
-If enabled:
-
-Last batter continues batting alone.
-
----
-
-# Retirement Rules
-
-Configurable.
-
-Examples:
-
-Retire at:
-
-* 25
-* 30
-* 50
-* Custom
-* Disabled
-
----
-
-# Bonus Rules
-
-Support:
-
-* Bonus runs
-* Milestone bonuses
-* Venue bonuses
-
-Future-proof schema required.
-
----
-
-# Boundary Rules
-
-Configurable.
-
-Examples:
-
-Boundary = 4
-
-Boundary = 6
-
-Custom values
-
----
-
-# Ball Event Types
-
-System must support:
-
-Dot
-
-1
-
-2
-
-3
-
-4
-
-5
-
-6
-
-Wide
-
-No Ball
-
-Bye
-
-Leg Bye
-
-Wicket
-
-Dead Ball
-
-Penalty Runs
-
-Undo Last Ball
-
----
-
-# Quick Scorekeeping Mode
-
-Tracks:
-
-* Runs
-* Wickets
-* Overs
-* Run Rate
-
-No players.
-
-No batting card.
-
-No bowling card.
-
-Example:
-
-Score:
-67/3
-
-Overs:
-7.2
-
-Run Rate:
-9.13
-
-Recent Balls:
-1 4 0 W 2 1
-
----
-
-# Team Scorekeeping Mode
-
-Uses generated teams.
-
-Additional setup:
-
-Select:
-
-* Batting Team
-* Bowling Team
-* Striker
-* Non-Striker
-* Bowler
-
----
-
-# Batter Statistics
-
-Track:
-
-Runs
-
-Balls
-
-4s
-
-6s
-
-Strike Rate
-
-Status
-
-Not Out / Out
-
-Dismissal Type
-
----
-
-# Bowler Statistics
-
-Track:
-
-Overs
-
-Maidens
-
-Runs
-
-Wickets
-
-Economy
-
----
-
-# Match Dashboard
-
-Display:
-
-Current Score
-
-Current Overs
-
-Run Rate
-
-Target (if applicable)
-
-Required Run Rate
-
-Current Partnership
-
-Recent Balls
-
----
-
-# Innings Management
-
-Support:
-
-Single Innings
-
-Two Innings
-
-Practice Mode
-
-Target Chase
-
----
-
-# Ball Timeline
-
-Every delivery must create an event.
-
-Examples:
-
-Over 1
-
-1
-0
-4
-W
-WD
-2
-
-Stored permanently.
-
-Used for:
-
-* Undo
-* Scorecard
-* Analytics
-
----
-
-# Undo System
-
-Required.
-
-User can undo:
-
-Last Ball
-
-System recalculates:
-
-* Score
-* Overs
-* Batter stats
-* Bowler stats
-* Run rate
-
-from timeline.
-
-No manual adjustments.
-
----
-
-# Database Design
-
-Create new migrations.
-
-Suggested tables:
-
-matches
-
-* id
-* session_id
-* match_type
-* status
-* rules_profile
-* created_at
-
----
-
-match_rules
-
-* id
-* match_id
-* rules_json
-
----
-
-innings
-
-* id
-* match_id
-* innings_number
-* batting_team
-* bowling_team
-* score
-* wickets
-* overs
-
----
-
-ball_events
-
-* id
-* innings_id
-* over_number
-* ball_number
-* event_type
-* runs
-* extras
-* batter_id nullable
-* bowler_id nullable
-* metadata_json
-* created_at
-
----
-
-player_match_stats
-
-* id
-* match_id
-* player_id
-* batting_stats_json
-* bowling_stats_json
-
----
-
-# API Requirements
-
-Create endpoints for:
-
-POST /api/matches
-
-GET /api/matches/{id}
-
-POST /api/matches/{id}/start
-
-POST /api/matches/{id}/ball
-
-POST /api/matches/{id}/undo
-
-GET /api/matches/{id}/scorecard
-
-GET /api/matches/{id}/timeline
-
-PATCH /api/matches/{id}/rules
-
-POST /api/matches/{id}/innings
-
----
-
-# Frontend Requirements
-
-Add a new navigation step.
-
-Current:
-
-Players
-→ Teams
-→ Toss
-
-New:
-
-Players
-→ Teams
-→ Toss
-→ Score
-
-Quick Mode:
-
-Players
-→ Score
-
----
-
-# Mobile First
-
-Scoring UI must be optimized for one-handed usage.
-
-Large buttons:
-
-0
-1
-2
-3
-4
-6
-W
-
-Wide
-
-No Ball
-
-Bye
-
-Leg Bye
-
-Undo
-
-Most actions should be possible in a single tap.
-
----
-
-# Future Features
-
-Design schema so these can be added later:
-
-* Wagon wheel
-* Partnerships
-* Match sharing
-* Live scoring
-* Spectator view
-* Tournament mode
-* Points table
-* Player rankings
-* MVP calculation
-* Scorecard export
-* PDF generation
-
----
-
-# Implementation Requirements
-
-1. Existing functionality must remain unchanged.
-2. Existing sessions must continue working.
-3. Existing database migrations must remain untouched.
-4. Create new migration files only.
-5. Follow existing FastAPI + Supabase architecture.
-6. Follow existing CLAUDE.md maintenance rules.
-7. Update:
-
-   * CLAUDE.md
-   * README.md
-   * Database Schema section
-   * API Reference section
-   * Pydantic Models section
-
-after implementation.
-
----
-
-# Deliverables
-
-Claude should provide:
-
-1. Database migration plan
-2. Updated schema
-3. Backend implementation
-4. API endpoints
-5. Frontend scorekeeping UI
-6. Rules engine implementation
-7. Undo functionality
-8. Documentation updates
-9. Backward compatibility verification
-10. Testing checklist
-
-Goal: Transform Cricket Team Maker into a complete Cricket Match Manager while preserving all existing functionality.
+This plan is fully self-contained — paste it into the build chat and reference it as "Team-Linked Scorekeeping Plan v1". When you trigger the build, start with **Phase 1** and answer the seven Open Decisions in §7 up-front so the build doesn't pause mid-phase.

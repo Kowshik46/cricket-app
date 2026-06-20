@@ -57,6 +57,7 @@ def _build_assignment_out(p: dict, team_name: str, is_captain: bool) -> TeamAssi
         player_name=p["name"],
         skill=p["skill"],
         can_bowl=p.get("can_bowl", False),
+        bowl_type=p.get("bowl_type", "legal"),
         team_name=team_name,
         is_captain=is_captain,
     )
@@ -114,7 +115,7 @@ async def generate_teams(session_id: str, body: TeamGenerateRequest):
 async def get_teams(session_id: str):
     res = (
         supabase_client.table("team_assignments")
-        .select("*, players(name, skill, can_bowl)")
+        .select("*, players(name, skill, can_bowl, bowl_type)")
         .eq("session_id", session_id)
         .execute()
     )
@@ -137,6 +138,7 @@ async def get_teams(session_id: str):
             player_name=r["players"]["name"],
             skill=r["players"]["skill"],
             can_bowl=r["players"].get("can_bowl", False),
+            bowl_type=r["players"].get("bowl_type", "legal"),
             team_name=r["team_name"],
             is_captain=r["is_captain"],
         )
@@ -183,6 +185,7 @@ async def add_player_to_team(session_id: str, body: AddToTeamRequest):
             "name": body.name,
             "skill": body.skill,
             "can_bowl": body.can_bowl,
+            "bowl_type": body.bowl_type,
         })
         .execute()
     )

@@ -82,6 +82,10 @@
           <span class="bowl-toggle-text">Can Bowl</span>
           <span style="margin-left:auto;font-size:.85rem">🏏</span>
         </div>
+        <div class="bowl-type-wrap">
+          <button class="bowl-type-btn on" id="btLegal" onclick="setBowlType('legal')">🏏 Legal</button>
+          <button class="bowl-type-btn" id="btThrow" onclick="setBowlType('throw')">🤾 Throw</button>
+        </div>
         <button class="btnadd" onclick="addPlayer()">+ ADD PLAYER</button>
       </div>
       <div class="plist" id="plist"></div>
@@ -96,6 +100,9 @@
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="btnout gold" onclick="goToScore()" style="flex:1">🏏 Quick Score</button>
         <button class="btnout gold" onclick="quickToss()" style="flex:1">🪙 Quick Toss</button>
+      </div>
+      <div style="margin-top:8px">
+        <button class="btnout follow-btn" onclick="openFollowMatchModal()" style="width:100%">👁 Follow a Live Match</button>
       </div>
     </div>
   </div>
@@ -139,6 +146,10 @@
             <div class="bowl-toggle"></div>
             <span class="bowl-toggle-text">Can Bowl</span>
             <span style="margin-left:auto;font-size:.85rem">🏏</span>
+          </div>
+          <div class="bowl-type-wrap">
+            <button class="bowl-type-btn on" id="lbtLegal" onclick="setLateBowlType('legal')">🏏 Legal</button>
+            <button class="bowl-type-btn" id="lbtThrow" onclick="setLateBowlType('throw')">🤾 Throw</button>
           </div>
           <span class="skill-label" style="margin-top:2px">Add to Team</span>
           <div class="team-pick" id="teamPick">
@@ -186,7 +197,7 @@
       <div class="arow" style="margin-top:10px">
         <button class="btnout" onclick="goTo(2)">← Teams</button>
         <button class="btnout" onclick="confirmNewMatch()">🔄 New Match</button>
-        <button class="btnout gold" onclick="goToScore()">🏏 Score →</button>
+        <button class="btnout gold" onclick="goToTeamScore()">🏏 Score →</button>
       </div>
     </div>
   </div>
@@ -301,6 +312,22 @@
     <input class="finput finput-sm" type="password" id="resetPwInput" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:10px">
     <input class="finput finput-sm" type="password" id="resetPwConfirm" placeholder="Confirm new password" autocomplete="new-password">
     <button class="btn-full" id="resetPwSubmitBtn" onclick="submitResetPassword()">Update Password</button>
+  </div>
+</div>
+
+<!-- FOLLOW MATCH MODAL -->
+<div class="modal-bg" id="followMatchModal">
+  <div class="modal">
+    <h2>👁 Follow a Live Match</h2>
+    <p style="color:var(--muted);font-size:.82rem;margin-top:-4px;margin-bottom:14px;line-height:1.5">Enter the 6-character code from the scorer, or scan their QR code to open this page directly.</p>
+    <input class="finput finput-sm" type="text" id="followMatchCode" placeholder="e.g. X7K3M2"
+           maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false"
+           oninput="this.value=this.value.toUpperCase()"
+           onkeydown="if(event.key==='Enter')goToWatch()">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('followMatchModal')">Cancel</button>
+      <button class="btn-confirm" onclick="goToWatch()">Watch Live →</button>
+    </div>
   </div>
 </div>
 

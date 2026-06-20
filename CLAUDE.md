@@ -15,24 +15,40 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
 
 - Persistent match sessions with cross-device sync (optional auth)
 - Skill-level + bowling-ability balanced team generation
-- Inline player editing (name, skill, can_bowl) after addition
+- Inline player editing (name, skill, can_bowl, bowl_type) after addition
 - Match session renaming
 - Late-player addition directly from the Teams view
 - Teams preserved across navigation — no accidental regeneration
 - Coin toss with history and decision recording (winner team + bat/field election saved to DB)
   - 3D coin has H (heads) and T (tails) faces; animation ends on the correct face matching the API result
   - **Quick Toss** button in Step 1 jumps straight to the toss — auto-creates a session silently if none exists
-- **Ball-by-ball scorekeeping** (Quick Match mode — no player tracking required)
-  - Always two innings — both teams bat; innings break screen shows target
-  - Configurable: overs (free text), players/side, max wickets (supports single-batter)
-  - Three rule toggles: Wide +1 extra, No Ball +1 extra, No Ball → Free Hit
-  - Free Hit 🔥 banner + gold ring marker in over breakdown; only Run Out allowed
-  - Undo last ball (recomputes everything from timeline)
-  - Wide, No Ball, Bye, Leg Bye, Wicket, Dot, Runs 0–6 events
+- **Ball-by-ball scorekeeping** — two modes, same UI:
+  - **Quick Match** (no player tracking): standalone `/score` with no `match_id` param
+  - **Team-linked Match**: `/score?match_id=<id>&session=<sid>` — full player attribution
+    - Opening Pair modal (striker, non-striker, opening bowler + bowl type)
+    - Per-ball batter/bowler attribution; automatic striker rotation derived server-side
+    - New-Batter modal after wicket (eligible batters from server; dismissed batters excluded)
+    - New-Bowler modal auto-triggers after each over completes — fires even when over ends on wicket
+    - Run-out dismissal prompts who was run out (Striker / Non-striker) and who is entering; non-striker run-out handled via `metadata.new_non_striker_id` piggybacked on next ball
+    - Live striker/non-striker/bowler strip below scoreboard
+    - Bowling caps: max overs per bowler, max throw overs per team (configurable in Setup)
+    - All bowling-team players eligible to bowl regardless of `can_bowl` flag (`can_bowl` is for team balancing only, not field enforcement)
+    - Classic scorecard view: batting table (R/B/4s/6s/SR + dismissal), bowling table (O/R/W/Econ + throw-over tag)
+    - Entry from Toss step via "🏏 Score →" → `goToTeamScore()` creates match + redirects
+  - Always two innings; innings break screen shows target
+  - Configurable: overs, players/side, max wickets
+  - Rule toggles: Wide +1 extra, No Ball +1 extra, No Ball → Free Hit
+  - Free Hit 🔥 banner + gold ring marker; only Run Out on free hit
+  - Undo last ball (recomputes state from timeline)
   - Win detection mid-innings when chasing team passes target
-  - Target & required run rate displayed during second innings chase
-  - Over breakdown and recent balls display
   - Mobile-first one-handed scoring UI at `/score`
+- **Live spectator mode** — sharable watch code + QR code so anyone can follow the score in real time
+  - Every match gets a unique 6-char alphanumeric `watch_code` (e.g. `X7K3M2`) stored in the DB
+  - "📤 Share" button in the score page header opens a modal with the code, a copyable link, and a QR code
+  - "👁 Follow a Live Match" button on the home page → enter code → `/watch?code=XXXXXX`
+  - `/watch` page (`watch.html`) polls `GET /api/watch/{code}` every 5s while live; stops on completion
+  - Spectator view: live score, current over balls, player-at-crease strip, batting/bowling scorecard tabs
+  - QR code generated client-side via `qrcode.js` (cdnjs CDN); no extra backend dependency
 - Profile page — display name, email/password management, match history, player stats
 - Forgot password flow via Supabase email reset
 - Offline-capable PWA (installable on mobile)
@@ -85,22 +101,26 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   │   ├── toss.py                 ← coin toss, history, winner + election recording (PATCH)
 │   │   ├── auth.py                 ← JWT verify, /me, /claim
 │   │   ├── profile.py              ← history, stats, display name, delete account
-│   │   └── matches.py              ← scorekeeping: matches, innings, ball events, undo, scorecard
+│   │   ├── matches.py              ← scorekeeping: matches, innings, ball events, undo, scorecard
+│   │   └── watch.py                ← public read-only spectator API (no auth required)
 │   ├── templates/
 │   │   ├── index.html              ← main SPA structure (HTML only — styles & JS in /static)
 │   │   ├── profile.html            ← profile page structure (HTML only — styles & JS in /static)
-│   │   └── score.html              ← ball-by-ball scoring UI structure (HTML only — styles & JS in /static)
+│   │   ├── score.html              ← ball-by-ball scoring UI structure (HTML only — styles & JS in /static)
+│   │   └── watch.html              ← live spectator view (polls /api/watch/{code} every 5s)
 │   ├── static/
 │   │   ├── manifest.json           ← PWA manifest
 │   │   ├── sw.js                   ← service worker (cache version `cricket-v2`)
 │   │   ├── css/                    ← extracted page styles (one file per template)
 │   │   │   ├── index.css
 │   │   │   ├── profile.css
-│   │   │   └── score.css
+│   │   │   ├── score.css
+│   │   │   └── watch.css
 │   │   ├── js/                     ← extracted page scripts (one file per template, no build step)
 │   │   │   ├── index.js            ← reads window.SUPA_URL/window.SUPA_ANON injected by index.html
 │   │   │   ├── profile.js          ← reads window.SUPA_URL/window.SUPA_ANON injected by profile.html
-│   │   │   └── score.js
+│   │   │   ├── score.js
+│   │   │   └── watch.js            ← no Jinja/Supabase injection needed (public page)
 │   │   └── icons/                  ← icon-192.png, icon-512.png (add manually)
 │   ├── supabase_schema.sql         ← initial table creation (run first)
 │   ├── supabase_auth_migration.sql ← adds owner_id + RLS policies (run second)
@@ -159,6 +179,8 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 4. `supabase_profile_migration.sql` — profile: `user_profiles` table
 5. `supabase_scoring_migration.sql` — scorekeeping: `matches`, `match_rules`, `innings`, `ball_events`, `player_match_stats`
 6. `supabase_toss_decision_migration.sql` — adds `winner_team` + `elected_to` columns to `toss_history`
+7. `supabase_team_score_migration.sql` — adds `bowl_type` to `players`, opening pair columns to `innings`, creates `innings_overs` table
+8. `supabase_watch_migration.sql` — adds `watch_code` unique column to `matches`
 
 ### Tables
 
@@ -178,6 +200,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `name` | `text` | max 30 chars, editable via PATCH |
 | `skill` | `text` | CHECK in `('beginner','intermediate','expert')`, editable via PATCH |
 | `can_bowl` | `boolean` | default `false` — used in bowling-balanced split, editable via PATCH |
+| `bowl_type` | `text` | CHECK in `('legal','throw')`, default `'legal'` — editable via PATCH |
 | `created_at` | `timestamptz` | |
 
 #### `team_assignments`
@@ -226,6 +249,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `overs` | `integer` | total overs per innings |
 | `players_per_side` | `integer` | |
 | `rules_preset` | `text` | `'standard'`, `'box'`, `'gully'`, `'custom'` |
+| `watch_code` | `text` nullable UNIQUE | 6-char alphanumeric; generated on `POST /api/matches`; used by `/api/watch/{code}` |
 | `created_at` | `timestamptz` | |
 
 #### `match_rules`
@@ -246,7 +270,20 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `bowling_team` | `text` | |
 | `target` | `integer` nullable | set after innings 1 completes |
 | `status` | `text` | `'live'` or `'completed'` |
+| `opening_striker_id` | `uuid` nullable FK | → `players(id)` ON DELETE SET NULL |
+| `opening_non_striker_id` | `uuid` nullable FK | → `players(id)` ON DELETE SET NULL |
 | `created_at` | `timestamptz` | |
+
+#### `innings_overs`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `innings_id` | `uuid` FK | → `innings(id)` ON DELETE CASCADE |
+| `over_number` | `integer` | 0-indexed |
+| `bowler_id` | `uuid` nullable FK | → `players(id)` ON DELETE SET NULL |
+| `bowl_type` | `text` | CHECK in `('legal','throw')`, default `'legal'` |
+| `created_at` | `timestamptz` | |
+| — | UNIQUE | `(innings_id, over_number)` |
 
 #### `ball_events`
 | Column | Type | Notes |
@@ -265,7 +302,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `wicket_type` | `text` nullable | bowled/caught/run_out/lbw/stumped/hit_wicket |
 | `batter_id` | `uuid` nullable FK | → `players(id)` ON DELETE SET NULL |
 | `bowler_id` | `uuid` nullable FK | → `players(id)` ON DELETE SET NULL |
-| `metadata` | `jsonb` | future-proof extra data |
+| `metadata` | `jsonb` | Known keys: `run_out_end` (`'striker'`\|`'non_striker'`) — which end dismissed; `new_non_striker_id` (uuid) — replacement non-striker after non-striker run-out; `free_hit` (bool) — marks delivery as free hit |
 | `created_at` | `timestamptz` | |
 
 #### `player_match_stats`
@@ -315,7 +352,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 |--------|------|------|-------------|
 | `POST` | `…/players` | `{name, skill, can_bowl}` | Add player; rejects duplicate names (case-insensitive) |
 | `GET` | `…/players` | — | List players ordered by `created_at` |
-| `PATCH` | `…/players/{player_id}` | `{name?, skill?, can_bowl?}` | Update player fields; rejects duplicate name (excludes self) |
+| `PATCH` | `…/players/{player_id}` | `{name?, skill?, can_bowl?, bowl_type?}` | Update player fields; rejects duplicate name (excludes self) |
 | `DELETE` | `…/players/{player_id}` | — | Remove player |
 
 ### Teams — `/api/sessions/{id}/teams`
@@ -366,8 +403,19 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `GET` | `/api/matches/{id}/innings/{inn_id}/scorecard` | — | Live scorecard for one innings |
 | `GET` | `/api/matches/{id}/innings/{inn_id}/timeline` | — | All ball events for one innings |
 | `GET` | `/api/matches/{id}/scorecard` | — | Full match scorecard (all innings) |
+| `POST` | `/api/matches/{id}/innings/{inn_id}/overs` | `OverAssignmentCreate` | Assign bowler + bowl_type to next over; validates consecutive ban and caps |
+| `GET` | `/api/matches/{id}/innings/{inn_id}/overs` | — | List all over assignments for innings |
+| `GET` | `/api/matches/{id}/innings/{inn_id}/eligible_bowlers` | — | Returns **all** bowling-team players eligible for next over with cap/block flags — `can_bowl` is NOT a filter here |
+| `GET` | `/api/matches/{id}/innings/{inn_id}/eligible_batters` | — | Returns batting-team players not yet dismissed and not currently at the crease; handles both striker and non-striker vacancy after run-outs |
 
 > **Score page** — `/score` (GET) renders `score.html`. Accepts query params `session`, `name`, `teamA`, `teamB`, `overs` to pre-populate setup form.
+
+### Watch (Spectator) — `/api/watch`
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/watch/{code}` | None | Public — returns `{ watch_code, match_name, scorecard: MatchScorecard }` for the given 6-char code |
+
+> **Watch page** — `/watch` (GET) renders `watch.html`. Accepts `?code=XXXXXX` query param; shows entry form if omitted. Polls `GET /api/watch/{code}` every 5s while live, stops when `status === 'completed'`. No auth or Supabase keys injected (fully public).
 
 > **Forgot password** is handled browser-side via `supaAuth.auth.resetPasswordForEmail()` with `redirectTo: window.location.origin + '/'`. The `PASSWORD_RECOVERY` event in `onAuthStateChange` opens the set-new-password modal.
 
@@ -382,13 +430,13 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `SessionCreate` | request | `name` |
 | `SessionRename` | request | `name` (required, min 1) |
 | `SessionOut` | response | `id, name, created_at` |
-| `PlayerCreate` | request | `name, skill, can_bowl=False` |
-| `PlayerUpdate` | request | `name?, skill?, can_bowl?` (all optional, at least one required) |
-| `PlayerOut` | response | `id, session_id, name, skill, can_bowl, created_at` |
+| `PlayerCreate` | request | `name, skill, can_bowl=False, bowl_type='legal'` |
+| `PlayerUpdate` | request | `name?, skill?, can_bowl?, bowl_type?` (all optional, at least one required) |
+| `PlayerOut` | response | `id, session_id, name, skill, can_bowl, bowl_type, created_at` |
 | `TeamGenerateRequest` | request | `team_a_name="Team A", team_b_name="Team B"` |
-| `TeamAssignmentOut` | response | `player_id, player_name, skill, can_bowl, team_name, is_captain` |
+| `TeamAssignmentOut` | response | `player_id, player_name, skill, can_bowl, bowl_type, team_name, is_captain` |
 | `TeamsOut` | response | `team_a_name, team_b_name, assignments[]` |
-| `AddToTeamRequest` | request | `name, skill, can_bowl=False, team_name` |
+| `AddToTeamRequest` | request | `name, skill, can_bowl=False, bowl_type='legal', team_name` |
 | `TossResult` | response | `id, result, toss_number, session_id, winner_team?, elected_to?` |
 | `TossDecisionUpdate` | request | `winner_team, elected_to` |
 | `TossHistoryItem` | response | `id, result, tossed_at, winner_team?, elected_to?` |
@@ -401,14 +449,19 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `UpdateDisplayNameRequest` | request | `display_name` (min 1, max 40) |
 | `UpdateEmailRequest` | request (unused — email change is browser-side) | `email` (min 3, max 120) |
 | `UpdatePasswordRequest` | request (unused — password change is browser-side) | `password` (min 6) |
-| `MatchRules` | config | `wide_runs, wide_counts_as_ball, wide_reball, no_ball_runs, no_ball_counts_as_ball, no_ball_reball, free_hit_enabled, free_hit_dismissals, wicket_types[], last_man_standing, retirement_runs, boundary_four, boundary_six` |
+| `MatchRules` | config | `wide_runs, wide_counts_as_ball, wide_reball, no_ball_runs, no_ball_counts_as_ball, no_ball_reball, free_hit_enabled, free_hit_dismissals, wicket_types[], last_man_standing, retirement_runs, boundary_four, boundary_six, max_overs_per_bowler?, max_throw_overs_per_team?` |
 | `MatchCreate` | request | `session_id?, match_type, overs, players_per_side, rules_preset, rules?` |
-| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, created_at` |
-| `InningsCreate` | request | `batting_team, bowling_team` |
-| `InningsOut` | response | `id, match_id, innings_number, batting_team, bowling_team, target, status, created_at` |
+| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, watch_code?, created_at` |
+| `InningsCreate` | request | `batting_team, bowling_team, opening_striker_id?, opening_non_striker_id?` |
+| `InningsOut` | response | `id, match_id, innings_number, batting_team, bowling_team, target, status, created_at, opening_striker_id?, opening_non_striker_id?` |
+| `OverAssignmentCreate` | request | `bowler_id, bowl_type='legal'` |
+| `OverAssignmentOut` | response | `id, innings_id, over_number, bowler_id?, bowl_type, created_at` |
 | `BallEventCreate` | request | `event_type, runs, extra_type?, is_boundary, boundary_type?, wicket_type?, batter_id?, bowler_id?, metadata` |
 | `BallEventOut` | response | `id, innings_id, over_number, ball_number, event_type, runs, extras, extra_type, is_legal_ball, is_boundary, boundary_type, wicket_type, batter_id, bowler_id, metadata, created_at` |
 | `InningsScorecard` | response | `innings, total_runs, total_wickets, total_overs, run_rate, target, required_run_rate, balls[]` |
+| `BatterStats` | response | `player_id, name, runs, balls, fours, sixes, strike_rate, status, dismissal?` |
+| `BowlerStats` | response | `player_id, name, overs, balls_legal, runs_conceded, wickets, economy, bowl_type, legal_overs, throw_overs` |
+| `InningsScorecard` | response (extended) | + `current_striker_id?, current_non_striker_id?, current_bowler_id?, current_over_number, batters[], bowlers[]` |
 | `MatchScorecard` | response | `match, rules, innings_list[]` |
 | `UpdateMatchRulesRequest` | request | `rules: MatchRules` |
 
@@ -463,7 +516,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | Stepper | `.steps` | Steps 1→2→3 with done/active/pending states |
 | Step 1 | `#sec1` | Add players: name input, skill pills, can_bowl toggle, player list with inline edit; **🏏 Quick Score** and **🪙 Quick Toss** gold shortcut buttons below Generate |
 | Step 2 | `#sec2` | Team cards, action row, collapsible late-player add panel |
-| Step 3 | `#sec3` | Coin toss with animation, history, and inline decision panel (winner + bat/field) |
+| Step 3 | `#sec3` | Coin toss with animation, history, decision panel (winner + bat/field); **🏏 Score →** button calls `goToTeamScore()` |
 
 ### Key State Variables
 | Variable | Type | Description |
@@ -480,6 +533,33 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | `_loadingSessionsLock` | boolean | Mutex preventing concurrent `loadSessions()` calls |
 | `lastTossId` | string\|null | UUID of the most recent toss — used by the decision panel to PATCH the result |
 | `tossWinner` | `'a'`\|`'b'`\|null | Which side the user selected as the toss winner; cleared on each new toss |
+| `bowlType` | `'legal'`\|`'throw'` | Bowl type for the player being added in step 1 |
+| `lateBowlType` | `'legal'`\|`'throw'` | Bowl type for the late-player add panel in step 2 |
+
+**score.js `cfg` additions (scoring page):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cfg.playersPerSide` | integer | Set in `startMatch()` / `loadTeamLinkedSetup()`; used by "Play Again" to recreate the match |
+| `cfg.matchNum` | integer | Tracks match series number (starts at 1, increments on each "Play Again", reset on "New Match") |
+
+**score.js specific (team-linked mode — set inside `matchState`):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `matchState.battingTeamPlayers` | array | `[{id, name, can_bowl, bowl_type}]` for the current batting team |
+| `matchState.bowlingTeamPlayers` | array | Bowling team players |
+| `matchState.currentStrikerId` | string\|null | UUID of striker; synced from server after each ball |
+| `matchState.currentNonStrikerId` | string\|null | UUID of non-striker |
+| `matchState.currentBowlerId` | string\|null | UUID of current bowler |
+| `matchState.currentOverNumber` | integer | 0-indexed current over |
+| `matchState.pendingBatterId` | string\|null | Set after striker wicket modal; sent as `batter_id` on next ball |
+| `isTeamLinked` | boolean | `!!URLSearchParams.get('match_id')` — drives all team-linked branches |
+| `_runOutTarget` | `'striker'`\|`'non_striker'` | Which end was dismissed in a run-out; drives `submitWicket()` logic |
+| `_newBatterPosition` | `'striker'`\|`'non_striker'` | Which crease position the incoming batter fills after a wicket |
+| `_pendingNonStrikerId` | string\|null | Replacement non-striker UUID after a non-striker run-out; piggybacked as `metadata.new_non_striker_id` on the very next ball |
+| `_openingPairSubmitting` | boolean | Guard flag preventing double-tap from submitting the Opening Pair modal twice (creates duplicate innings) |
+| `matchState._batTeamName` | string\|null | Name of team currently mapped to `battingTeamPlayers`; used by "Play Again" to decide whether to swap player arrays when changing which team bats first |
 
 ### Key localStorage
 | Key | Value |
@@ -518,7 +598,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 5. `supaAuth.auth.updateUser({ password })` sets the new password; user is signed in automatically
 
 ### Service Worker
-- Cache name: `cricket-v1`
+- Cache name: `cricket-v2`
 - Shell cached on install: `/`, Google Fonts URL
 - Strategy: cache-first for shell/static, **network-first for `/api/`**
 
@@ -578,7 +658,9 @@ sessions where it is currently `NULL`, atomically assigning them to the new user
 [ ] 8. Run: ALTER TABLE user_profiles DISABLE ROW LEVEL SECURITY;
 [ ] 9. Run supabase_scoring_migration.sql (scorekeeping tables)
 [ ]10. Run supabase_toss_decision_migration.sql (winner_team + elected_to on toss_history)
-[ ]11. Set SUPABASE_ANON_KEY in .env (if using auth)
+[ ]11. Run supabase_team_score_migration.sql (bowl_type on players, opening pair on innings, innings_overs table)
+[ ]12. Run supabase_watch_migration.sql (watch_code column on matches)
+[ ]12. Set SUPABASE_ANON_KEY in .env (if using auth)
 [ ]12. Add icon-192.png and icon-512.png to app/static/icons/
 [ ]13. Run server: uvicorn app.main:app --reload --port 8000
 [ ]14. Visit /score to verify scorekeeping UI loads
@@ -628,6 +710,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | Sessions disappear immediately after creation when logged in | `POST /sessions` didn't read the JWT so `owner_id` was always `NULL`; `GET /sessions` for auth users filters by `owner_id` so the session was invisible | Fixed: `create_session` now reads `Authorization` header and stamps `owner_id` |
 | All experts/bowlers end up in one team | Two separate `enumerate()` loops both reset `i=0` so the best non-bowler always went to Team A alongside the best bowler | Fixed: single shared `idx` across both loops with true snake draft |
 | Expert skill pill not visibly highlighted | Used dark forest green `rgba(45,106,79)` for border/background — nearly invisible on dark UI | Fixed: updated to bright green `rgba(116,212,148)` matching the pill text color |
+| Select dropdown options invisible (Windows) | Native OS dropdown popup renders with light background but option text was cream-colored | Fixed: `option{background:#0e1c28;color:var(--cream)}` + `color-scheme:dark` on `select.finput` |
+| Bowler dropdown empty in opening pair / new bowler modal | `can_bowl=true` filter applied to bowling-team players — most players have `can_bowl=false` | Fixed: removed `can_bowl` filter in `openOpeningPairModal()` (JS) and `eligible_bowlers` endpoint (Python); all bowling-team players are eligible |
+| "Both innings already created for this match" error on 2nd innings | Double-tap on "Start Innings" button submitted the opening pair POST twice, creating two innings | Fixed: `_openingPairSubmitting` flag in `submitOpeningPair()` — cleared in `finally` block |
+| New bowler modal never triggers after over completes | `_derive_batting_state` used `if nxt_over in over_map: current_bowler = over_map[nxt_over]` — branch skipped when next over unassigned, so previous bowler retained | Fixed: `current_bowler = over_map.get(nxt_over)` returns `None` for unassigned overs, correctly making `sc.current_bowler_id === null` |
+| New bowler modal not triggered when over ends on a wicket | `else if (overJustDone...)` condition skipped when the preceding `if (wasWicket...)` also fired | Fixed: changed to two separate `if` blocks so both new-batter and new-bowler modals can fire on the same ball |
+| Non-striker incorrectly cleared on striker's wicket | `_derive_batting_state` always set `striker = None` on any wicket; didn't check `run_out_end` metadata | Fixed: reads `ball.metadata.run_out_end` and compares `dismissed_id` to determine which end to clear |
 
 ---
 
@@ -642,9 +730,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **Cascade deletes**: deleting a session auto-removes players, assignments, toss history
 - **Skill constraint**: enforced in both Pydantic (`Literal`) and Postgres (`CHECK`)
 - **Bowling split is best-effort**: odd number of bowlers gives one team one extra — not rejected
+- **`can_bowl` is a balancing hint, not a field rule**: it only affects team generation; during a match ALL players in the bowling team are eligible to bowl
 - **Email/password changes**: always browser-side via Supabase JS SDK — never add backend endpoints for these
 - **Admin API calls**: only httpx DELETE for account deletion; all other auth admin ops are browser-side
 - **Scorekeeping is stateless**: score is always derived from `ball_events` timeline — never store a mutable score counter
+- **`_derive_batting_state()`** walks the ball timeline to compute current striker, non-striker, bowler, and over number; reads `metadata.run_out_end` to decide which end is vacated on a run-out, and `metadata.new_non_striker_id` to seat the replacement non-striker
 - **Rules are config-driven**: all scoring behaviour (wide runs, free hit, etc.) comes from `match_rules.rules_json`, never hardcoded in `matches.py`
 - **Score page is standalone**: `/score` works without a session (Quick Match); `session_id` is optional
 - **RULES_PRESETS** is defined in both `models.py` (backend) and `score.html` (frontend JS) — keep them in sync

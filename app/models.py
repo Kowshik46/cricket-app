@@ -22,12 +22,14 @@ class PlayerCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=30)
     skill: Literal["beginner", "intermediate", "expert"]
     can_bowl: bool = False
+    bowl_type: Literal["legal", "throw"] = "legal"
 
 
 class PlayerUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=30)
     skill: Optional[Literal["beginner", "intermediate", "expert"]] = None
     can_bowl: Optional[bool] = None
+    bowl_type: Optional[Literal["legal", "throw"]] = None
 
 
 class PlayerOut(BaseModel):
@@ -36,6 +38,7 @@ class PlayerOut(BaseModel):
     name: str
     skill: Literal["beginner", "intermediate", "expert"]
     can_bowl: bool
+    bowl_type: Literal["legal", "throw"]
     created_at: datetime
 
 
@@ -49,6 +52,7 @@ class TeamAssignmentOut(BaseModel):
     player_name: str
     skill: str
     can_bowl: bool
+    bowl_type: Literal["legal", "throw"] = "legal"
     team_name: str
     is_captain: bool
 
@@ -63,6 +67,7 @@ class AddToTeamRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=30)
     skill: Literal["beginner", "intermediate", "expert"]
     can_bowl: bool = False
+    bowl_type: Literal["legal", "throw"] = "legal"
     team_name: str = Field(..., max_length=40)
 
 
@@ -167,6 +172,9 @@ class MatchRules(BaseModel):
     # Boundary values
     boundary_four: int = 4
     boundary_six: int = 6
+    # Bowling caps (team-linked matches only; None = no cap)
+    max_overs_per_bowler: Optional[int] = None
+    max_throw_overs_per_team: Optional[int] = None
 
 
 RULES_PRESETS: dict[str, dict] = {
@@ -214,12 +222,15 @@ class MatchOut(BaseModel):
     overs: int
     players_per_side: int
     rules_preset: str
+    watch_code: Optional[str] = None
     created_at: datetime
 
 
 class InningsCreate(BaseModel):
     batting_team: str = Field(..., min_length=1, max_length=40)
     bowling_team: str = Field(..., min_length=1, max_length=40)
+    opening_striker_id: Optional[str] = None
+    opening_non_striker_id: Optional[str] = None
 
 
 class InningsOut(BaseModel):
@@ -231,6 +242,47 @@ class InningsOut(BaseModel):
     target: Optional[int]
     status: str
     created_at: datetime
+    opening_striker_id: Optional[UUID] = None
+    opening_non_striker_id: Optional[UUID] = None
+
+
+class OverAssignmentCreate(BaseModel):
+    bowler_id: str
+    bowl_type: Literal["legal", "throw"] = "legal"
+
+
+class OverAssignmentOut(BaseModel):
+    id: UUID
+    innings_id: UUID
+    over_number: int
+    bowler_id: Optional[UUID]
+    bowl_type: Literal["legal", "throw"]
+    created_at: datetime
+
+
+class BatterStats(BaseModel):
+    player_id: UUID
+    name: str
+    runs: int
+    balls: int
+    fours: int
+    sixes: int
+    strike_rate: float
+    status: Literal["batting", "out", "not_out"]
+    dismissal: Optional[str] = None
+
+
+class BowlerStats(BaseModel):
+    player_id: UUID
+    name: str
+    overs: int          # completed overs
+    balls_legal: int    # legal balls in the current (incomplete) over
+    runs_conceded: int
+    wickets: int
+    economy: float
+    bowl_type: Literal["legal", "throw"]  # predominant type this innings
+    legal_overs: int
+    throw_overs: int
 
 
 EventType = Literal["dot", "runs", "wide", "no_ball", "bye", "leg_bye", "wicket", "dead_ball", "penalty"]
@@ -278,6 +330,13 @@ class InningsScorecard(BaseModel):
     target: Optional[int]
     required_run_rate: Optional[float]
     balls: list[BallEventOut]
+    # Team-linked additions (null / empty in quick mode)
+    current_striker_id: Optional[UUID] = None
+    current_non_striker_id: Optional[UUID] = None
+    current_bowler_id: Optional[UUID] = None
+    current_over_number: int = 0
+    batters: list[BatterStats] = []
+    bowlers: list[BowlerStats] = []
 
 
 class MatchScorecard(BaseModel):
