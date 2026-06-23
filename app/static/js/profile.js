@@ -273,6 +273,47 @@ function renderHistory(history){
       html += '</div></div>';
     }
 
+    if(match.matches && match.matches.length > 0){
+      html += '<div class="games-log">';
+      html += '<div class="toss-log-title">Games Played (' + match.matches.length + ')</div>';
+      match.matches.forEach(function(g, gi){
+        var statusCls = g.status === 'completed' ? 'gs-done' : g.status === 'live' ? 'gs-live' : 'gs-setup';
+        var statusLabel = g.status === 'completed' ? 'Final' : g.status === 'live' ? 'Live' : g.status === 'innings_break' ? 'Break' : 'Setup';
+        var gameName = g.name || ('Game ' + (gi + 1));
+        html += '<div class="game-entry">';
+        html += '<div class="game-entry-header">';
+        html += '<span class="game-name">' + esc(gameName) + '</span>';
+        html += '<span class="game-status ' + statusCls + '">' + statusLabel + '</span>';
+        html += '</div>';
+        if(g.innings_list && g.innings_list.length > 0){
+          html += '<div class="game-innings">';
+          g.innings_list.forEach(function(inn){
+            var result = inn.batting_team + ': <strong>' + inn.runs + '/' + inn.wickets + '</strong>';
+            result += ' <span class="game-overs">(' + inn.overs_str + ' ov)</span>';
+            html += '<div class="game-inn-row">' + result + '</div>';
+          });
+          // Compute result if completed (2 innings)
+          if(g.status === 'completed' && g.innings_list.length === 2){
+            var i1 = g.innings_list[0], i2 = g.innings_list[1];
+            var winner = '';
+            if(i2.runs > i1.runs){
+              winner = i2.batting_team + ' won';
+            } else if(i1.runs > i2.runs){
+              winner = i1.batting_team + ' won by ' + (i1.runs - i2.runs) + ' runs';
+            } else {
+              winner = 'Match tied';
+            }
+            html += '<div class="game-result">🏆 ' + esc(winner) + '</div>';
+          }
+          html += '</div>';
+        } else {
+          html += '<div class="game-inn-row" style="color:var(--muted);font-style:italic">No balls bowled yet</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
     html += '</div>'; // match-body
     html += '</div>'; // match-card
   });

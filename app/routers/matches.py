@@ -446,6 +446,8 @@ async def create_match(body: MatchCreate):
     }
     if body.session_id:
         row["session_id"] = body.session_id
+    if body.name:
+        row["name"] = body.name
 
     res = supabase_client.table("matches").insert(row).execute()
     if not res.data:

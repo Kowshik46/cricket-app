@@ -11,6 +11,7 @@ const cfg = {               // set on startMatch()
   maxWickets: 5,
   playersPerSide: 6,
   matchNum: 1,
+  sessionName: '',          // e.g. "Chase game"; used to build "Chase game - Match N" labels
   rules: { wide_extra: true, nb_extra: true, free_hit: true },
   team1: 'Team A',
   team2: 'Team B',
@@ -168,7 +169,13 @@ function buildRulesObject(extra = {}) {
 // Pre-populate from query params (or from match record when team-linked)
 (async function initSetup() {
   const p = _urlParams;
-  if (p.get('name'))  document.getElementById('matchName').value = p.get('name');
+  if (p.get('name')) {
+    document.getElementById('matchName').value = p.get('name');
+    // Strip " - Match N" suffix to recover the base session name
+    const raw = p.get('name');
+    const cut = raw.lastIndexOf(' - Match ');
+    cfg.sessionName = cut > 0 ? raw.substring(0, cut) : raw;
+  }
   if (p.get('teamA')) document.getElementById('team1Name').value = p.get('teamA');
   if (p.get('teamB')) document.getElementById('team2Name').value = p.get('teamB');
   if (p.get('overs')) document.getElementById('oversInput').value = p.get('overs');
@@ -228,6 +235,7 @@ async function startMatch() {
       players_per_side: parseInt(document.getElementById('playersInput').value) || 6,
       rules_preset: 'custom',
       rules,
+      name: document.getElementById('matchName').value.trim() || null,
     });
     matchState.matchId = match.id;
     matchState.inningsNum = 1;
@@ -606,7 +614,61 @@ async function finishMatch(sc) {
     </div>
   `;
 
+  document.getElementById('bestPerformers').style.display = 'none';
   showView('viewResult');
+  _fetchAndShowBestPerformers();
+}
+
+// ─── best performers ─────────────────────────────────────────
+
+async function _fetchAndShowBestPerformers() {
+  if (!isTeamLinked || !matchState.matchId) return;
+  try {
+    const fullSc = await api('GET', `/matches/${matchState.matchId}/scorecard`);
+    _renderBestPerformers(fullSc);
+  } catch(e) { /* non-critical */ }
+}
+
+function _renderBestPerformers(fullSc) {
+  const byTeam = {};
+  for (const inn of (fullSc.innings_list || [])) {
+    const bat = inn.innings.batting_team;
+    const bow = inn.innings.bowling_team;
+    if (!byTeam[bat]) byTeam[bat] = { batters: [], bowlers: [] };
+    if (!byTeam[bow]) byTeam[bow] = { batters: [], bowlers: [] };
+    (inn.batters  || []).forEach(b => byTeam[bat].batters.push(b));
+    (inn.bowlers  || []).forEach(b => byTeam[bow].bowlers.push(b));
+  }
+
+  const teams = [cfg.team1, cfg.team2];
+  let html = '';
+  for (const team of teams) {
+    const data = byTeam[team];
+    if (!data) continue;
+    const bestBat = [...data.batters]
+      .filter(b => b.balls > 0)
+      .sort((a, b) => b.runs - a.runs || b.strike_rate - a.strike_rate)[0];
+    const bestBowl = [...data.bowlers]
+      .filter(b => b.balls_legal > 0)
+      .sort((a, b) => b.wickets - a.wickets || (a.economy || 99) - (b.economy || 99))[0];
+
+    if (!bestBat && !bestBowl) continue;
+    html += `<div class="bp-team"><div class="bp-team-name">${team}</div>`;
+    if (bestBat) {
+      const sr = bestBat.strike_rate != null ? bestBat.strike_rate.toFixed(0) : '—';
+      html += `<div class="bp-row"><span class="bp-icon">🏏</span><span class="bp-name">${bestBat.name}</span><span class="bp-stat">${bestBat.runs} runs (${bestBat.balls}b · SR ${sr})</span></div>`;
+    }
+    if (bestBowl) {
+      const econ = bestBowl.economy != null ? bestBowl.economy.toFixed(1) : '—';
+      html += `<div class="bp-row"><span class="bp-icon">🎳</span><span class="bp-name">${bestBowl.name}</span><span class="bp-stat">${bestBowl.wickets}/${bestBowl.runs_conceded} · ${bestBowl.overs} ov · Econ ${econ}</span></div>`;
+    }
+    html += '</div>';
+  }
+
+  if (html) {
+    document.getElementById('bpContent').innerHTML = html;
+    document.getElementById('bestPerformers').style.display = '';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -916,23 +978,127 @@ function pickVal(containerId, v) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PLAY AGAIN (same teams)
+// PLAY AGAIN — multi-page modal
 // ═══════════════════════════════════════════════════════════════
+
+let _paTeamAPlayers = null; // null = use existing matchState arrays; set when new teams chosen
+let _paTeamBPlayers = null;
+let _paEditPlayers  = null; // [{id,name,can_bowl,bowl_type,team:'A'|'B'}] for manual editor
+let _paManualPrevPage = 'paPageOptions';
+
+function _paShowPage(id) {
+  ['paPageOptions','paPageRandom','paPageManual','paPageToss'].forEach(p => {
+    const el = document.getElementById(p);
+    if (el) el.style.display = p === id ? '' : 'none';
+  });
+}
 
 function openPlayAgainModal() {
   cfg.matchNum = (cfg.matchNum || 1) + 1;
-  document.getElementById('paMatchNum').textContent = `Match ${cfg.matchNum}`;
+  _paTeamAPlayers = null;
+  _paTeamBPlayers = null;
+  _paEditPlayers  = null;
+
+  const _paTitle = cfg.sessionName ? `${cfg.sessionName} - Match ${cfg.matchNum}` : `Match ${cfg.matchNum}`;
+  document.getElementById('paMatchNum').textContent = _paTitle;
   document.getElementById('paTeamInfo').textContent = `${cfg.team1} vs ${cfg.team2} · ${cfg.overs} overs`;
   document.getElementById('paTeam1Btn').textContent = `${cfg.team1} bats first`;
   document.getElementById('paTeam2Btn').textContent = `${cfg.team2} bats first`;
 
+  const hasSession = !!(isTeamLinked && _urlParams.get('session'));
+  document.getElementById('paOptRandom').style.display = hasSession ? '' : 'none';
+  document.getElementById('paOptManual').style.display = hasSession ? '' : 'none';
+
+  _paShowPage('paPageOptions');
+  openModal('playAgainModal');
+}
+
+function _paSameTeams() { _paToss(); }
+
+async function _paRandom() {
+  _paShowPage('paPageRandom');
+  const sessionId = _urlParams.get('session');
+  document.getElementById('paRandomContent').innerHTML =
+    '<div style="color:var(--muted);font-family:\'DM Mono\',monospace;font-size:.72rem;text-align:center;padding:14px 0">Generating…</div>';
+
+  try {
+    const teams = await api('POST', `/sessions/${sessionId}/teams/generate`, {
+      team_a_name: cfg.team1,
+      team_b_name: cfg.team2,
+    });
+    _paTeamAPlayers = (teams.assignments || [])
+      .filter(a => a.team_name === cfg.team1)
+      .map(a => ({ id: a.player_id, name: a.player_name, can_bowl: a.can_bowl, bowl_type: a.bowl_type || 'legal' }));
+    _paTeamBPlayers = (teams.assignments || [])
+      .filter(a => a.team_name === cfg.team2)
+      .map(a => ({ id: a.player_id, name: a.player_name, can_bowl: a.can_bowl, bowl_type: a.bowl_type || 'legal' }));
+
+    const tagList = players => players.map(p => `<span class="pa-player-tag">${p.name}</span>`).join('');
+    document.getElementById('paRandomContent').innerHTML = `
+      <div class="pa-preview-block"><div class="pa-preview-label">${cfg.team1}</div><div class="pa-player-tags">${tagList(_paTeamAPlayers)}</div></div>
+      <div class="pa-preview-block" style="margin-top:10px"><div class="pa-preview-label">${cfg.team2}</div><div class="pa-player-tags">${tagList(_paTeamBPlayers)}</div></div>`;
+  } catch(e) {
+    document.getElementById('paRandomContent').innerHTML =
+      `<div style="color:var(--red);font-family:'DM Mono',monospace;font-size:.72rem;text-align:center;padding:14px 0">Error: ${e.message}</div>`;
+  }
+}
+
+function _paManual(backTarget) {
+  _paManualPrevPage = backTarget || 'paPageOptions';
+
+  if (_paTeamAPlayers && _paTeamBPlayers) {
+    _paEditPlayers = [
+      ..._paTeamAPlayers.map(p => ({ ...p, team: 'A' })),
+      ..._paTeamBPlayers.map(p => ({ ...p, team: 'B' })),
+    ];
+  } else {
+    const batIsA = matchState._batTeamName === cfg.team1;
+    const aPlayers = batIsA ? matchState.battingTeamPlayers : matchState.bowlingTeamPlayers;
+    const bPlayers = batIsA ? matchState.bowlingTeamPlayers : matchState.battingTeamPlayers;
+    _paEditPlayers = [
+      ...(aPlayers || []).map(p => ({ ...p, team: 'A' })),
+      ...(bPlayers || []).map(p => ({ ...p, team: 'B' })),
+    ];
+  }
+
+  _renderManualEditor();
+  _paShowPage('paPageManual');
+}
+
+function _renderManualEditor() {
+  const col = (players, side) => players.map(p =>
+    `<button class="pa-player-chip" onclick="_paTogglePlayer('${p.id}')">${p.name} <span class="pa-chip-arr">${side === 'A' ? '→' : '←'}</span></button>`
+  ).join('');
+
+  const aPlayers = _paEditPlayers.filter(p => p.team === 'A');
+  const bPlayers = _paEditPlayers.filter(p => p.team === 'B');
+  document.getElementById('paManualContent').innerHTML = `
+    <div class="pa-editor-cols">
+      <div class="pa-col"><div class="pa-col-label">${cfg.team1}</div>${col(aPlayers, 'A')}</div>
+      <div class="pa-col"><div class="pa-col-label">${cfg.team2}</div>${col(bPlayers, 'B')}</div>
+    </div>`;
+}
+
+function _paTogglePlayer(id) {
+  const p = _paEditPlayers.find(p => p.id === id);
+  if (p) { p.team = p.team === 'A' ? 'B' : 'A'; _renderManualEditor(); }
+}
+
+function _paManualBack() { _paShowPage(_paManualPrevPage); }
+
+function _paConfirmManual() {
+  _paTeamAPlayers = _paEditPlayers.filter(p => p.team === 'A').map(({ team, ...p }) => p);
+  _paTeamBPlayers = _paEditPlayers.filter(p => p.team === 'B').map(({ team, ...p }) => p);
+  _paToss();
+}
+
+function _paToss() {
   document.getElementById('paTossSection').style.display = '';
   document.getElementById('paChooseSection').style.display = 'none';
   document.getElementById('paTossText').textContent = 'Who bats first?';
   document.getElementById('paCoin').textContent = '🪙';
   document.getElementById('paCoin').classList.remove('spinning');
-
-  openModal('playAgainModal');
+  _paShowPage('paPageToss');
 }
 
 function doPlayAgainToss() {
@@ -953,22 +1119,60 @@ function doPlayAgainToss() {
 async function startPlayAgain(battingTeam) {
   closeModal('playAgainModal');
   const bowlingTeam = battingTeam === cfg.team1 ? cfg.team2 : cfg.team1;
+  const prevTeam1   = cfg.team1; // save before reassignment for player-array logic
 
   try {
     const sessionId = _urlParams.get('session') || null;
-    const rules = buildRulesObject();
+    const matchName = cfg.sessionName
+      ? `${cfg.sessionName} - Match ${cfg.matchNum}`
+      : `Match ${cfg.matchNum}`;
 
-    const match = await api('POST', '/matches', {
-      session_id: sessionId,
-      match_type: isTeamLinked ? 'team' : 'quick',
-      overs: cfg.overs,
-      players_per_side: cfg.playersPerSide || 6,
-      rules_preset: 'custom',
-      rules,
-    });
+    // Team-linked: create match upfront (startMatch() in team-linked only patches rules, not creates)
+    // Quick mode: don't create match here — let startMatch() create it normally
+    if (isTeamLinked) {
+      const rules = buildRulesObject();
+      const match = await api('POST', '/matches', {
+        session_id: sessionId,
+        match_type: 'team',
+        overs: cfg.overs,
+        players_per_side: cfg.playersPerSide || 6,
+        rules_preset: 'custom',
+        rules,
+        name: matchName,
+      });
+      matchState.matchId = match.id;
+      _setWatchCode(match.watch_code);
 
-    // Reset state for new match
-    matchState.matchId = match.id;
+      // Set player arrays for opening pair modal
+      if (_paTeamAPlayers) {
+        // New teams from random/manual — _paTeamAPlayers is for the original cfg.team1 (prevTeam1)
+        if (battingTeam === prevTeam1) {
+          matchState.battingTeamPlayers = _paTeamAPlayers;
+          matchState.bowlingTeamPlayers = _paTeamBPlayers || [];
+        } else {
+          matchState.battingTeamPlayers = _paTeamBPlayers || [];
+          matchState.bowlingTeamPlayers = _paTeamAPlayers;
+        }
+      } else {
+        // Same teams — swap if batting order changed
+        if (battingTeam !== matchState._batTeamName) {
+          const temp = matchState.battingTeamPlayers;
+          matchState.battingTeamPlayers = matchState.bowlingTeamPlayers;
+          matchState.bowlingTeamPlayers = temp;
+        }
+      }
+      matchState._batTeamName = battingTeam;
+      matchState._pendingBat  = battingTeam;
+      matchState._pendingBow  = bowlingTeam;
+
+      // Keep team name inputs read-only (teams are fixed once session is linked)
+      document.getElementById('team1Name').readOnly = true;
+      document.getElementById('team2Name').readOnly = true;
+      document.getElementById('team1Name').style.opacity = '.65';
+      document.getElementById('team2Name').style.opacity = '.65';
+    }
+
+    // Reset common state
     matchState.inningsId = null;
     matchState.inningsNum = 1;
     matchState.scorecard = null;
@@ -980,9 +1184,7 @@ async function startPlayAgain(battingTeam) {
     matchState.currentOverNumber = 0;
     matchState.pendingBatterId = null;
     _pendingNonStrikerId = null;
-    _setWatchCode(match.watch_code);
 
-    // Update cfg so team1 is always the first-innings batter
     cfg.team1 = battingTeam;
     cfg.team2 = bowlingTeam;
 
@@ -992,34 +1194,19 @@ async function startPlayAgain(battingTeam) {
     document.getElementById('chaseBar').classList.remove('show');
     const ps = document.getElementById('playerStrip');
     if (ps) ps.style.display = 'none';
+    document.getElementById('bestPerformers').style.display = 'none';
 
-    if (isTeamLinked) {
-      await api('PATCH', `/matches/${match.id}/rules`, { rules });
+    // Pre-fill setup form so user can review/adjust before starting
+    document.getElementById('matchName').value = matchName;
+    document.getElementById('oversInput').value = cfg.overs;
+    document.getElementById('playersInput').value = cfg.playersPerSide || 6;
+    document.getElementById('wicketsInput').value = cfg.maxWickets;
+    document.getElementById('team1Name').value = battingTeam;
+    document.getElementById('team2Name').value = bowlingTeam;
 
-      // Swap player arrays if needed so battingTeamPlayers matches the new bat team
-      if (battingTeam !== matchState._batTeamName) {
-        const temp = matchState.battingTeamPlayers;
-        matchState.battingTeamPlayers = matchState.bowlingTeamPlayers;
-        matchState.bowlingTeamPlayers = temp;
-      }
-      matchState._batTeamName = battingTeam;
-      matchState._pendingBat = battingTeam;
-      matchState._pendingBow = bowlingTeam;
+    switchScoreTab('live');
+    showView('viewSetup');
 
-      openOpeningPairModal();
-    } else {
-      const inn = await api('POST', `/matches/${match.id}/innings`, {
-        batting_team: battingTeam,
-        bowling_team: bowlingTeam,
-      });
-      matchState.inningsId = inn.id;
-      matchState._batTeamName = battingTeam;
-
-      switchScoreTab('live');
-      showView('viewScoring');
-      updateScoringHeader();
-      await refreshScorecard();
-    }
   } catch(e) {
     toast(e.message, true);
   }
@@ -1041,14 +1228,17 @@ function resetToSetup() {
     _selectedBowlerId:null, _forOver:0,
   };
   cfg.matchNum = 1;
-  document.getElementById('team1Name').value = '';
-  document.getElementById('team2Name').value = '';
+  const t1 = document.getElementById('team1Name');
+  const t2 = document.getElementById('team2Name');
+  t1.value = ''; t1.readOnly = false; t1.style.opacity = '';
+  t2.value = ''; t2.readOnly = false; t2.style.opacity = '';
   document.getElementById('statTargetWrap').style.display = 'none';
   document.getElementById('statRRRWrap').style.display = 'none';
   document.getElementById('chaseBar').classList.remove('show');
   const ps = document.getElementById('playerStrip');
   if (ps) ps.style.display = 'none';
   setFreehitBanner(false);
+  document.getElementById('bestPerformers').style.display = 'none';
   switchScoreTab('live');
   showView('viewSetup');
 }

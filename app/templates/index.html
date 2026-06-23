@@ -102,7 +102,7 @@
         <button class="btnout gold" onclick="quickToss()" style="flex:1">🪙 Quick Toss</button>
       </div>
       <div style="margin-top:8px">
-        <button class="btnout follow-btn" onclick="openFollowMatchModal()" style="width:100%">👁 Follow a Live Match</button>
+        <button class="btnout follow-btn" onclick="openFollowMatchModal()" style="width:100%"><span class="live-dot"></span>Follow a Live Match</button>
       </div>
     </div>
   </div>
@@ -112,11 +112,12 @@
     <div class="card">
       <div class="ctitle">The Teams <span class="tag">STEP 2</span></div>
       <div class="tstack" id="tstack"></div>
-      <div class="arow">
-        <button class="btnout" onclick="goTo(1)">← Players</button>
-        <button class="btnout" onclick="reshuffle()">🔀 Reshuffle</button>
-        <button class="btnout green" onclick="shareTeams()">📋 Share</button>
-        <button class="btnout gold" onclick="goTo(3)">Toss →</button>
+      <button class="btnprim" style="margin-top:14px" onclick="goTo(3)">Toss →</button>
+      <div class="arow" style="margin-top:8px">
+        <button class="btnout btnout-sm" onclick="goTo(1)">← Players</button>
+        <button class="btnout btnout-sm" onclick="reshuffle()">🔀 Reshuffle</button>
+        <button class="btnout btnout-sm" onclick="openTeamEditor()">✏️ Edit</button>
+        <button class="btnout btnout-sm green" onclick="shareTeams()">📋 Share</button>
       </div>
 
       <!-- ADD PLAYER TO TEAM PANEL -->
@@ -316,6 +317,18 @@
 </div>
 
 <!-- FOLLOW MATCH MODAL -->
+<div class="modal-bg" id="teamEditModal">
+  <div class="modal">
+    <h2>✏️ Edit Teams</h2>
+    <p style="font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);margin-top:-8px;margin-bottom:12px">Tap a player to move them to the other team</p>
+    <div id="teamEditContent"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('teamEditModal')">Cancel</button>
+      <button class="btn-confirm" onclick="saveTeamEdit()">Save Teams</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="followMatchModal">
   <div class="modal">
     <h2>👁 Follow a Live Match</h2>

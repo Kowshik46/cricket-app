@@ -9,6 +9,7 @@ from app.models import (
     MatchHistoryItem, MatchPlayerItem, TossHistorySummary,
     PlayerStatsItem,
     UpdateDisplayNameRequest,
+    InningsSummaryItem, MatchSummaryItem,
 )
 
 router = APIRouter()
@@ -72,6 +73,48 @@ async def get_history(authorization: Optional[str] = Header(default=None)):
     for row in (toss_res.data or []):
         toss_by_session[row["session_id"]].append(row)
 
+    # Fetch matches for these sessions
+    matches_res = (
+        supabase_client.table("matches")
+        .select("id, session_id, name, status, overs, created_at")
+        .in_("session_id", session_ids)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    all_matches = matches_res.data or []
+    match_ids = [m["id"] for m in all_matches]
+    matches_by_session: dict[str, list] = defaultdict(list)
+    for m in all_matches:
+        matches_by_session[str(m["session_id"])].append(m)
+
+    # Fetch innings for those matches
+    all_innings: list[dict] = []
+    innings_by_match: dict[str, list] = defaultdict(list)
+    if match_ids:
+        innings_res = (
+            supabase_client.table("innings")
+            .select("id, match_id, innings_number, batting_team, bowling_team, status")
+            .in_("match_id", match_ids)
+            .order("innings_number", desc=False)
+            .execute()
+        )
+        all_innings = innings_res.data or []
+        for inn in all_innings:
+            innings_by_match[str(inn["match_id"])].append(inn)
+
+    # Fetch ball events (lightweight columns only) for score aggregation
+    innings_ids = [inn["id"] for inn in all_innings]
+    balls_by_innings: dict[str, list] = defaultdict(list)
+    if innings_ids:
+        balls_res = (
+            supabase_client.table("ball_events")
+            .select("innings_id, runs, extras, is_legal_ball, event_type")
+            .in_("innings_id", innings_ids)
+            .execute()
+        )
+        for b in (balls_res.data or []):
+            balls_by_innings[str(b["innings_id"])].append(b)
+
     result = []
     for s in sessions:
         sid = s["id"]
@@ -104,6 +147,32 @@ async def get_history(authorization: Optional[str] = Header(default=None)):
             for t in toss_by_session.get(sid, [])
         ]
 
+        match_summaries: list[MatchSummaryItem] = []
+        for m in matches_by_session.get(sid, []):
+            innings_summaries: list[InningsSummaryItem] = []
+            for inn in innings_by_match.get(str(m["id"]), []):
+                balls = balls_by_innings.get(str(inn["id"]), [])
+                total_runs = sum(b["runs"] + b["extras"] for b in balls)
+                total_wickets = sum(1 for b in balls if b["event_type"] == "wicket")
+                legal_balls = sum(1 for b in balls if b["is_legal_ball"])
+                overs_str = f"{legal_balls // 6}.{legal_balls % 6}"
+                innings_summaries.append(InningsSummaryItem(
+                    innings_number=inn["innings_number"],
+                    batting_team=inn["batting_team"],
+                    bowling_team=inn["bowling_team"],
+                    runs=total_runs,
+                    wickets=total_wickets,
+                    overs_str=overs_str,
+                    status=inn["status"],
+                ))
+            match_summaries.append(MatchSummaryItem(
+                id=m["id"],
+                name=m.get("name") or None,
+                status=m["status"],
+                created_at=m["created_at"],
+                innings_list=innings_summaries,
+            ))
+
         result.append(MatchHistoryItem(
             id=sid,
             name=s["name"],
@@ -112,6 +181,7 @@ async def get_history(authorization: Optional[str] = Header(default=None)):
             team_b_name=team_b_name,
             players=players,
             toss_history=tosses,
+            matches=match_summaries,
         ))
 
     return result

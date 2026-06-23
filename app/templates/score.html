@@ -239,8 +239,10 @@
       <div class="result-sub" id="resultSub"></div>
       <div class="hr"></div>
       <div id="resultScores"></div>
-      <div style="text-align:center;margin-top:16px">
-        <button onclick="resetToSetup()" style="background:transparent;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:.68rem;cursor:pointer;text-decoration:underline">Start fresh new match</button>
+      <div id="bestPerformers" style="display:none">
+        <div class="hr"></div>
+        <div class="ctitle" style="font-size:.85rem;margin-bottom:10px">⭐ Best Performers</div>
+        <div id="bpContent"></div>
       </div>
     </div>
   </div>
@@ -413,19 +415,48 @@
     <h2 id="paMatchNum">Match 2</h2>
     <div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-bottom:18px" id="paTeamInfo"></div>
 
-    <div id="paTossSection">
-      <div style="text-align:center;margin-bottom:14px">
-        <div class="pa-coin" id="paCoin">🪙</div>
-      </div>
-      <button class="btn-ok" onclick="doPlayAgainToss()" style="width:100%;margin-bottom:8px;border-radius:10px">🪙 Toss for batting side</button>
-      <button onclick="document.getElementById('paTossSection').style.display='none';document.getElementById('paChooseSection').style.display=''" style="width:100%;background:transparent;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;cursor:pointer;padding:8px;text-decoration:underline">Skip — choose directly</button>
+    <!-- Page 1: Options -->
+    <div id="paPageOptions">
+      <button class="pa-opt-btn" onclick="_paSameTeams()">🏏 Same Teams</button>
+      <button class="pa-opt-btn" id="paOptRandom" onclick="_paRandom()">🔀 Random Teams</button>
+      <button class="pa-opt-btn" id="paOptManual" onclick="_paManual(null)">✏️ Manual Teams</button>
     </div>
 
-    <div id="paChooseSection" style="display:none">
-      <div id="paTossText" style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--gold);text-align:center;margin-bottom:12px">Who bats first?</div>
-      <div class="btrow" style="gap:8px">
-        <button class="btype-btn" id="paTeam1Btn" onclick="startPlayAgain(cfg.team1)">— bats first</button>
-        <button class="btype-btn" id="paTeam2Btn" onclick="startPlayAgain(cfg.team2)">— bats first</button>
+    <!-- Page 2: Random preview -->
+    <div id="paPageRandom" style="display:none">
+      <div id="paRandomContent" style="min-height:60px"></div>
+      <button class="pa-adjust-link" onclick="_paManual('paPageRandom')">✏️ Manually Adjust →</button>
+      <div class="btrow" style="margin-top:12px">
+        <button class="btn-cancel" style="flex:0 0 auto;padding:10px 16px" onclick="_paShowPage('paPageOptions')">← Back</button>
+        <button class="btn-ok" onclick="_paToss()">Proceed to Toss →</button>
+      </div>
+    </div>
+
+    <!-- Page 3: Manual editor -->
+    <div id="paPageManual" style="display:none">
+      <div class="pa-editor-hint">Tap a player to move to the other team</div>
+      <div id="paManualContent"></div>
+      <div class="btrow" style="margin-top:12px">
+        <button class="btn-cancel" style="flex:0 0 auto;padding:10px 16px" onclick="_paManualBack()">← Back</button>
+        <button class="btn-ok" onclick="_paConfirmManual()">Confirm Teams →</button>
+      </div>
+    </div>
+
+    <!-- Page 4: Toss -->
+    <div id="paPageToss" style="display:none">
+      <div id="paTossSection">
+        <div style="text-align:center;margin-bottom:14px">
+          <div class="pa-coin" id="paCoin">🪙</div>
+        </div>
+        <button class="btn-ok" onclick="doPlayAgainToss()" style="width:100%;margin-bottom:8px;border-radius:10px">🪙 Toss for batting side</button>
+        <button onclick="document.getElementById('paTossSection').style.display='none';document.getElementById('paChooseSection').style.display=''" style="width:100%;background:transparent;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;cursor:pointer;padding:8px;text-decoration:underline">Skip — choose directly</button>
+      </div>
+      <div id="paChooseSection" style="display:none">
+        <div id="paTossText" style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--gold);text-align:center;margin-bottom:12px">Who bats first?</div>
+        <div class="btrow" style="gap:8px">
+          <button class="btype-btn" id="paTeam1Btn" onclick="startPlayAgain(cfg.team1)">— bats first</button>
+          <button class="btype-btn" id="paTeam2Btn" onclick="startPlayAgain(cfg.team2)">— bats first</button>
+        </div>
       </div>
     </div>
 

@@ -45,7 +45,7 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
 - **Live spectator mode** — sharable watch code + QR code so anyone can follow the score in real time
   - Every match gets a unique 6-char alphanumeric `watch_code` (e.g. `X7K3M2`) stored in the DB
   - "📤 Share" button in the score page header opens a modal with the code, a copyable link, and a QR code
-  - "👁 Follow a Live Match" button on the home page → enter code → `/watch?code=XXXXXX`
+  - **"Follow a Live Match"** button on the home page — styled as a prominent gold filled button (`.follow-btn`) with a pulsing red `.live-dot` indicator; opens `#followMatchModal` → enter code → `/watch?code=XXXXXX`
   - `/watch` page (`watch.html`) polls `GET /api/watch/{code}` every 5s while live; stops on completion
   - Spectator view: live score, current over balls, player-at-crease strip, batting/bowling scorecard tabs
   - QR code generated client-side via `qrcode.js` (cdnjs CDN); no extra backend dependency
@@ -181,6 +181,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 6. `supabase_toss_decision_migration.sql` — adds `winner_team` + `elected_to` columns to `toss_history`
 7. `supabase_team_score_migration.sql` — adds `bowl_type` to `players`, opening pair columns to `innings`, creates `innings_overs` table
 8. `supabase_watch_migration.sql` — adds `watch_code` unique column to `matches`
+9. `supabase_match_name_migration.sql` — adds `name text` column to `matches`
 
 ### Tables
 
@@ -250,6 +251,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `players_per_side` | `integer` | |
 | `rules_preset` | `text` | `'standard'`, `'box'`, `'gully'`, `'custom'` |
 | `watch_code` | `text` nullable UNIQUE | 6-char alphanumeric; generated on `POST /api/matches`; used by `/api/watch/{code}` |
+| `name` | `text` nullable | Human-readable match name (e.g. "Chase game - Match 2"); set at creation, shown in history |
 | `created_at` | `timestamptz` | |
 
 #### `match_rules`
@@ -360,6 +362,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 |--------|------|------|-------------|
 | `POST` | `…/teams/generate` | `{team_a_name, team_b_name}` | Generate balanced teams (clears previous) |
 | `GET` | `…/teams` | — | Fetch last generated teams (persisted in DB) |
+| `PUT` | `…/teams` | `TeamManualEditRequest` | Replace team assignments with a manually specified split; preserves existing captain for each team if they remain on the same side |
 | `POST` | `…/teams/add_player` | `{name, skill, can_bowl, team_name}` | Add a late player to a specific team without reshuffle |
 
 ### Toss — `/api/sessions/{id}/toss`
@@ -436,6 +439,8 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `TeamGenerateRequest` | request | `team_a_name="Team A", team_b_name="Team B"` |
 | `TeamAssignmentOut` | response | `player_id, player_name, skill, can_bowl, bowl_type, team_name, is_captain` |
 | `TeamsOut` | response | `team_a_name, team_b_name, assignments[]` |
+| `TeamManualAssignment` | inner | `player_id, team_name` — one entry per player in `TeamManualEditRequest` |
+| `TeamManualEditRequest` | request | `team_a_name, team_b_name, assignments[TeamManualAssignment]` — body for `PUT …/teams` |
 | `AddToTeamRequest` | request | `name, skill, can_bowl=False, bowl_type='legal', team_name` |
 | `TossResult` | response | `id, result, toss_number, session_id, winner_team?, elected_to?` |
 | `TossDecisionUpdate` | request | `winner_team, elected_to` |
@@ -444,14 +449,16 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `ClaimRequest` | request | `session_ids[]` |
 | `TossHistorySummary` | response | `result, tossed_at, winner_team?, elected_to?` |
 | `MatchPlayerItem` | response | `name, skill, can_bowl, team_name, is_captain` |
-| `MatchHistoryItem` | response | `id, name, created_at, team_a_name, team_b_name, players[], toss_history[]` |
+| `MatchHistoryItem` | response | `id, name, created_at, team_a_name, team_b_name, players[], toss_history[], matches[MatchSummaryItem]` |
 | `PlayerStatsItem` | response | `name, games, as_captain, as_bowler` |
 | `UpdateDisplayNameRequest` | request | `display_name` (min 1, max 40) |
 | `UpdateEmailRequest` | request (unused — email change is browser-side) | `email` (min 3, max 120) |
 | `UpdatePasswordRequest` | request (unused — password change is browser-side) | `password` (min 6) |
 | `MatchRules` | config | `wide_runs, wide_counts_as_ball, wide_reball, no_ball_runs, no_ball_counts_as_ball, no_ball_reball, free_hit_enabled, free_hit_dismissals, wicket_types[], last_man_standing, retirement_runs, boundary_four, boundary_six, max_overs_per_bowler?, max_throw_overs_per_team?` |
-| `MatchCreate` | request | `session_id?, match_type, overs, players_per_side, rules_preset, rules?` |
-| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, watch_code?, created_at` |
+| `MatchCreate` | request | `session_id?, match_type, overs, players_per_side, rules_preset, rules?, name?` |
+| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, watch_code?, name?, created_at` |
+| `InningsSummaryItem` | inner | `innings_number, batting_team, bowling_team, runs, wickets, overs_str, status` — lightweight innings score for history |
+| `MatchSummaryItem` | inner | `id, name?, status, created_at, innings_list[InningsSummaryItem]` — match summary inside `MatchHistoryItem` |
 | `InningsCreate` | request | `batting_team, bowling_team, opening_striker_id?, opening_non_striker_id?` |
 | `InningsOut` | response | `id, match_id, innings_number, batting_team, bowling_team, target, status, created_at, opening_striker_id?, opening_non_striker_id?` |
 | `OverAssignmentCreate` | request | `bowler_id, bowl_type='legal'` |
@@ -515,7 +522,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | Session bar | `.session-bar` | Dropdown select, new (+) button, rename (✎) button, delete (🗑) button |
 | Stepper | `.steps` | Steps 1→2→3 with done/active/pending states |
 | Step 1 | `#sec1` | Add players: name input, skill pills, can_bowl toggle, player list with inline edit; **🏏 Quick Score** and **🪙 Quick Toss** gold shortcut buttons below Generate |
-| Step 2 | `#sec2` | Team cards, action row, collapsible late-player add panel |
+| Step 2 | `#sec2` | Team cards; **Toss →** full-width primary button (`.btnprim`) as the main next-step CTA; secondary compact row below it: ← Players · 🔀 Reshuffle · ✏️ Edit · 📋 Share; collapsible late-player add panel; **✏️ Edit** opens `#teamEditModal` for manual player-swap between teams |
 | Step 3 | `#sec3` | Coin toss with animation, history, decision panel (winner + bat/field); **🏏 Score →** button calls `goToTeamScore()` |
 
 ### Key State Variables
@@ -535,6 +542,16 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | `tossWinner` | `'a'`\|`'b'`\|null | Which side the user selected as the toss winner; cleared on each new toss |
 | `bowlType` | `'legal'`\|`'throw'` | Bowl type for the player being added in step 1 |
 | `lateBowlType` | `'legal'`\|`'throw'` | Bowl type for the late-player add panel in step 2 |
+| `_teEditPlayers` | array\|null | Working copy for the manual team editor modal: `[{player_id, player_name, skill, can_bowl, bowl_type, team:'a'\|'b'}]`; mutated by `toggleTeamEdit(id)`; reset each time `openTeamEditor()` is called |
+
+**index.js team editor functions:**
+
+| Function | Description |
+|----------|-------------|
+| `openTeamEditor()` | Builds `_teEditPlayers` from current `teamsData.assignments`, renders the two-column chip grid, opens `#teamEditModal` |
+| `_renderTeamEditor()` | Re-renders the chip grid from `_teEditPlayers`; called after each `toggleTeamEdit` |
+| `toggleTeamEdit(playerId)` | Flips a player's `team` field (`'a'` ↔ `'b'`) and re-renders |
+| `saveTeamEdit()` | Calls `PUT /api/sessions/{id}/teams` with the new split; updates `teamsData` from response; re-renders team cards; shows toast |
 
 **score.js `cfg` additions (scoring page):**
 
@@ -560,6 +577,37 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | `_pendingNonStrikerId` | string\|null | Replacement non-striker UUID after a non-striker run-out; piggybacked as `metadata.new_non_striker_id` on the very next ball |
 | `_openingPairSubmitting` | boolean | Guard flag preventing double-tap from submitting the Opening Pair modal twice (creates duplicate innings) |
 | `matchState._batTeamName` | string\|null | Name of team currently mapped to `battingTeamPlayers`; used by "Play Again" to decide whether to swap player arrays when changing which team bats first |
+
+**score.js Play Again state (module-level):**
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `_paTeamAPlayers` | array\|null | Player array for `cfg.team1` chosen via Random or Manual; `null` = reuse current `matchState` arrays (Same Teams path) |
+| `_paTeamBPlayers` | array\|null | Player array for `cfg.team2` from the same selection; always set/cleared together with `_paTeamAPlayers` |
+| `_paEditPlayers` | array\|null | Working copy for the manual editor: `[{id, name, can_bowl, bowl_type, team:'A'\|'B'}]`; mutated in-place by `_paTogglePlayer()` |
+| `_paManualPrevPage` | string | ID of the page to return to when "← Back" is pressed in the manual editor (`'paPageOptions'` or `'paPageRandom'`) |
+
+**Play Again modal pages (`#playAgainModal`):**
+
+| Page ID | Shown when | Description |
+|---------|------------|-------------|
+| `#paPageOptions` | Modal opens | 3 option buttons: Same Teams / Random Teams / Manual Teams; Random+Manual hidden for quick match (no session) |
+| `#paPageRandom` | "Random Teams" clicked | Calls `POST /sessions/{id}/teams/generate`, shows team-tag preview; "✏️ Manually Adjust →" link goes to manual editor with `_paManualPrevPage='paPageRandom'` |
+| `#paPageManual` | "Manual Teams" or "Manually Adjust" clicked | Two-column grid of player chips; tap to move player between teams; "Confirm Teams →" calls `_paConfirmManual()` |
+| `#paPageToss` | `_paToss()` called from any path | Existing toss UI (coin + choose who bats); `startPlayAgain(battingTeam)` closes modal, creates new match (team-linked only), pre-fills setup form, shows `viewSetup` |
+
+> **`startPlayAgain` flow:** After toss, instead of jumping straight to scoring, it creates the new match (team-linked) OR not (quick mode — let `startMatch()` create it), pre-fills the setup form with the new match name ("Match 2"), overs, and team names (batting team as team1), then shows `viewSetup`. The user reviews/adjusts and clicks "Start Match" to proceed to the opening pair modal (team-linked) or scoring view (quick mode). Team name inputs are readOnly in team-linked Play Again.
+>
+> **`startPlayAgain` team-array logic:** saves `prevTeam1 = cfg.team1` before the `cfg.team1 = battingTeam` reassignment, then uses `battingTeam === prevTeam1` to correctly assign `_paTeamAPlayers` to the batting or bowling slot.
+
+**Best Performers (result screen):**
+
+- Shown after every team-linked match via `_fetchAndShowBestPerformers()` (fires at end of `finishMatch()`); hidden in quick match.
+- Calls `GET /matches/{id}/scorecard`, walks `innings_list` to bucket batters/bowlers by team name, then picks:
+  - Best batter: most `runs`, tie-break: `strike_rate`
+  - Best bowler: most `wickets`, tie-break: lowest `economy`
+- Rendered in `#bestPerformers` / `#bpContent` inside the result card; hidden again when `startPlayAgain` or `resetToSetup` clears the result screen.
+- The result card has no "Start fresh new match" link — Play Again covers all restart options (same teams, random, manual, toss).
 
 ### Key localStorage
 | Key | Value |
@@ -660,7 +708,8 @@ sessions where it is currently `NULL`, atomically assigning them to the new user
 [ ]10. Run supabase_toss_decision_migration.sql (winner_team + elected_to on toss_history)
 [ ]11. Run supabase_team_score_migration.sql (bowl_type on players, opening pair on innings, innings_overs table)
 [ ]12. Run supabase_watch_migration.sql (watch_code column on matches)
-[ ]12. Set SUPABASE_ANON_KEY in .env (if using auth)
+[ ]13. Run supabase_match_name_migration.sql (name column on matches)
+[ ]14. Set SUPABASE_ANON_KEY in .env (if using auth)
 [ ]12. Add icon-192.png and icon-512.png to app/static/icons/
 [ ]13. Run server: uvicorn app.main:app --reload --port 8000
 [ ]14. Visit /score to verify scorekeeping UI loads
@@ -716,6 +765,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | New bowler modal never triggers after over completes | `_derive_batting_state` used `if nxt_over in over_map: current_bowler = over_map[nxt_over]` — branch skipped when next over unassigned, so previous bowler retained | Fixed: `current_bowler = over_map.get(nxt_over)` returns `None` for unassigned overs, correctly making `sc.current_bowler_id === null` |
 | New bowler modal not triggered when over ends on a wicket | `else if (overJustDone...)` condition skipped when the preceding `if (wasWicket...)` also fired | Fixed: changed to two separate `if` blocks so both new-batter and new-bowler modals can fire on the same ball |
 | Non-striker incorrectly cleared on striker's wicket | `_derive_batting_state` always set `striker = None` on any wicket; didn't check `run_out_end` metadata | Fixed: reads `ball.metadata.run_out_end` and compares `dismissed_id` to determine which end to clear |
+| Play Again team arrays wrong after batting-team swap | `cfg.team1 = battingTeam` was set before the `if (battingTeam === cfg.team1)` check, so the check was always `true` | Fixed: save `prevTeam1 = cfg.team1` before the reassignment; use `prevTeam1` for the A/B player-array decision |
 
 ---
 
@@ -738,6 +788,13 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **Rules are config-driven**: all scoring behaviour (wide runs, free hit, etc.) comes from `match_rules.rules_json`, never hardcoded in `matches.py`
 - **Score page is standalone**: `/score` works without a session (Quick Match); `session_id` is optional
 - **RULES_PRESETS** is defined in both `models.py` (backend) and `score.html` (frontend JS) — keep them in sync
+- **Step 2 action layout**: `Toss →` is a full-width `.btnprim` (primary CTA); secondary actions (← Players · 🔀 Reshuffle · ✏️ Edit · 📋 Share) are `.btnout.btnout-sm` in a flex row below — keep this hierarchy when adding new Step 2 actions
+- **`PUT /teams` vs `POST /teams/generate`**: use `PUT` to persist a manually edited split; use `POST .../generate` only for a fresh random split — they both replace all `team_assignments` rows for the session
+- **Best performers**: only computed and shown in team-linked matches (`isTeamLinked === true`); the quick-match path has no player attribution so the `#bestPerformers` block stays hidden
+- **`_paTeamAPlayers` / `_paTeamBPlayers`**: always indexed to the team named `cfg.team1` / `cfg.team2` at the moment of selection; `startPlayAgain` saves `prevTeam1` before reassigning `cfg.team1 = battingTeam` so the A/B mapping stays correct
+- **Play Again → Setup form**: `startPlayAgain` shows `viewSetup` (not scoring directly); for team-linked it pre-creates the match so `startMatch()` just patches rules; for quick mode it skips match creation (let `startMatch()` create it to avoid double-creation)
+- **Match name persistence**: `matches.name` stores the human-readable name; set at creation via `MatchCreate.name`; passed from `goToTeamScore()` / `startPlayAgain()` / `startMatch()`(quick mode); profile history shows it per game
+- **Profile history includes games**: `GET /api/profile/history` now returns `matches[]` per session with innings summaries (runs/wickets/overs) computed from `ball_events`; no full scorecard, just lightweight aggregates
 
 ---
 

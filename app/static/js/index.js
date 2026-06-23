@@ -837,6 +837,77 @@ function buildShareText(){
   return '🏏 Cricket Teams\n\n' + fmt(teamA, '🟢 ' + aName) + '\n\n' + fmt(teamB, '🔴 ' + bName);
 }
 
+// ── team editor (manual swap) ────────────────────────────────
+
+var _teEditPlayers = null; // [{player_id, player_name, skill, can_bowl, bowl_type, team:'a'|'b'}]
+
+function openTeamEditor(){
+  if(!teamsData) return;
+  var aName = teamsData.team_a_name;
+  _teEditPlayers = teamsData.assignments.map(function(a){
+    return {
+      player_id: a.player_id,
+      player_name: a.player_name,
+      skill: a.skill,
+      can_bowl: a.can_bowl,
+      bowl_type: a.bowl_type,
+      team: a.team_name === aName ? 'a' : 'b',
+    };
+  });
+  _renderTeamEditor();
+  openModal('teamEditModal');
+}
+
+function _renderTeamEditor(){
+  if(!teamsData || !_teEditPlayers) return;
+  var aName = teamsData.team_a_name;
+  var bName = teamsData.team_b_name;
+  var aPlayers = _teEditPlayers.filter(function(p){ return p.team === 'a'; });
+  var bPlayers = _teEditPlayers.filter(function(p){ return p.team === 'b'; });
+
+  function col(players, side){
+    return players.map(function(p){
+      return '<button class="te-chip" onclick="toggleTeamEdit(\'' + p.player_id + '\')">'
+        + esc(p.player_name)
+        + ' <span class="te-chip-arr">' + (side === 'a' ? '→' : '←') + '</span></button>';
+    }).join('');
+  }
+
+  document.getElementById('teamEditContent').innerHTML =
+    '<div class="te-cols">'
+    + '<div class="te-col"><div class="te-col-label">🟢 ' + esc(aName) + '</div>' + col(aPlayers, 'a') + '</div>'
+    + '<div class="te-col"><div class="te-col-label">🔴 ' + esc(bName) + '</div>' + col(bPlayers, 'b') + '</div>'
+    + '</div>';
+}
+
+function toggleTeamEdit(playerId){
+  var p = _teEditPlayers && _teEditPlayers.find(function(p){ return p.player_id === playerId; });
+  if(p){ p.team = p.team === 'a' ? 'b' : 'a'; _renderTeamEditor(); }
+}
+
+async function saveTeamEdit(){
+  if(!teamsData || !currentSessionId || !_teEditPlayers) return;
+  var aName = teamsData.team_a_name;
+  var bName = teamsData.team_b_name;
+  var assignments = _teEditPlayers.map(function(p){
+    return { player_id: p.player_id, team_name: p.team === 'a' ? aName : bName };
+  });
+  try {
+    teamsData = await api('PUT', '/sessions/' + currentSessionId + '/teams', {
+      team_a_name: aName,
+      team_b_name: bName,
+      assignments: assignments,
+    });
+    closeModal('teamEditModal');
+    renderTeams();
+    toast('Teams saved!');
+  } catch(e){
+    toast(e.message, true);
+  }
+}
+
+// ── share teams ──────────────────────────────────────────────
+
 async function shareTeams(){
   if(!teamsData) return;
   var text = buildShareText();
@@ -1088,7 +1159,7 @@ function goToScore(){
   var params = new URLSearchParams({ session: currentSessionId });
   var selEl = document.getElementById('sessionSelect');
   if(selEl && selEl.options[selEl.selectedIndex]){
-    params.set('name', selEl.options[selEl.selectedIndex].text);
+    params.set('name', selEl.options[selEl.selectedIndex].text + ' - Match 1');
   }
   if(teamsData){
     params.set('teamA', teamsData.team_a_name || 'Team A');
@@ -1102,6 +1173,9 @@ async function goToTeamScore(){
   if(!currentSessionId){ toast('Select a match first', true); return; }
   if(!teamsData){ toast('Generate teams first', true); return; }
   try {
+    var selEl = document.getElementById('sessionSelect');
+    var sessionName = (selEl && selEl.options[selEl.selectedIndex])
+      ? selEl.options[selEl.selectedIndex].text : '';
     var playersA = teamsData.assignments
       ? teamsData.assignments.filter(function(a){ return a.team_name === teamsData.team_a_name; })
       : [];
@@ -1121,8 +1195,11 @@ async function goToTeamScore(){
         boundary_four:4, boundary_six:6,
         max_overs_per_bowler:null, max_throw_overs_per_team:null,
       },
+      name: sessionName ? sessionName + ' - Match 1' : null,
     });
-    window.location.href = '/score?match_id=' + match.id + '&session=' + currentSessionId;
+    var nameParam = sessionName ? encodeURIComponent(sessionName + ' - Match 1') : '';
+    window.location.href = '/score?match_id=' + match.id + '&session=' + currentSessionId
+      + (nameParam ? '&name=' + nameParam : '');
   } catch(e) {
     toast(e.message || 'Failed to create match', true);
   }

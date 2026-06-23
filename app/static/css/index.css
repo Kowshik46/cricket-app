@@ -194,6 +194,7 @@ h1 em{color:var(--gold);font-style:normal}
 .btnout:active{background:rgba(253,246,227,.06)}
 .btnout.gold{background:rgba(244,200,66,.08);border-color:rgba(244,200,66,.35);color:var(--gold)}
 .btnout.green{background:rgba(45,106,79,.12);border-color:rgba(64,145,108,.5);color:#74d494}
+.btnout-sm{padding:9px 6px;font-size:.72rem}
 
 /* TOSS */
 .toss-wrap{text-align:center;padding:4px 0}
@@ -224,6 +225,13 @@ h1 em{color:var(--gold);font-style:normal}
 .tdelect{display:flex;gap:8px}
 .tdelect .tdbtn{font-size:.7rem}
 .tdresult{font-family:'DM Mono',monospace;font-size:.7rem;color:#74d494;text-align:center;min-height:1em;letter-spacing:.5px}
+
+/* ── team editor modal ─────────────────────── */
+.te-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:55vh;overflow-y:auto}
+.te-col-label{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+.te-chip{display:block;width:100%;margin-bottom:6px;padding:8px 10px;border-radius:8px;border:1px solid var(--cb);background:rgba(253,246,227,.04);color:var(--cream);font-family:'DM Mono',monospace;font-size:.75rem;cursor:pointer;text-align:left;transition:background .15s}
+.te-chip:hover{background:rgba(253,246,227,.1)}
+.te-chip-arr{color:var(--muted);font-size:.7rem}
 
 /* MODAL */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -299,5 +307,18 @@ h1 em{color:var(--gold);font-style:normal}
 .toast.error{background:rgba(140,20,20,.96)}
 
 /* FOLLOW MATCH BUTTON */
-.follow-btn{color:var(--muted);border-color:rgba(255,255,255,.12);font-size:.82rem;letter-spacing:.3px}
-.follow-btn:hover{border-color:rgba(244,200,66,.4);color:var(--gold)}
+.follow-btn{
+  color:var(--sky);background:var(--gold);
+  border-color:var(--gold);font-size:.85rem;font-weight:600;letter-spacing:.4px;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.follow-btn:hover{background:#f7d44a;border-color:#f7d44a}
+.follow-btn:active{transform:scale(.98);opacity:.9}
+.live-dot{
+  width:8px;height:8px;border-radius:50%;background:#e63946;flex-shrink:0;
+  animation:livepulse 1.4s ease-in-out infinite;
+}
+@keyframes livepulse{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.4;transform:scale(.7)}
+}

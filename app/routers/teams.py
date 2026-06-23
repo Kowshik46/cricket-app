@@ -1,6 +1,6 @@
 import random
 from fastapi import APIRouter, HTTPException
-from app.models import TeamGenerateRequest, TeamsOut, TeamAssignmentOut, AddToTeamRequest
+from app.models import TeamGenerateRequest, TeamsOut, TeamAssignmentOut, AddToTeamRequest, TeamManualEditRequest
 from app.database import supabase_client
 
 router = APIRouter()
@@ -146,6 +146,70 @@ async def get_teams(session_id: str):
     ]
 
     return TeamsOut(team_a_name=team_a_name, team_b_name=team_b_name, assignments=assignments)
+
+
+@router.put("/{session_id}/teams", response_model=TeamsOut)
+async def manual_edit_teams(session_id: str, body: TeamManualEditRequest):
+    """Replace team assignments with a manually specified split. Captains preserved if still on same team."""
+    if not body.assignments:
+        raise HTTPException(400, "assignments cannot be empty")
+
+    valid_teams = {body.team_a_name, body.team_b_name}
+    for a in body.assignments:
+        if a.team_name not in valid_teams:
+            raise HTTPException(400, f"team_name '{a.team_name}' must be one of the two team names")
+
+    team_a_ids = [a.player_id for a in body.assignments if a.team_name == body.team_a_name]
+    team_b_ids = [a.player_id for a in body.assignments if a.team_name == body.team_b_name]
+    if not team_a_ids or not team_b_ids:
+        raise HTTPException(400, "Each team must have at least one player")
+
+    # Preserve existing captains if they remain on the same team
+    existing_res = (
+        supabase_client.table("team_assignments")
+        .select("player_id, team_name, is_captain")
+        .eq("session_id", session_id)
+        .execute()
+    )
+    existing_captains = {
+        r["team_name"]: r["player_id"]
+        for r in (existing_res.data or []) if r["is_captain"]
+    }
+
+    old_cap_a = existing_captains.get(body.team_a_name)
+    old_cap_b = existing_captains.get(body.team_b_name)
+    cap_a = old_cap_a if old_cap_a in team_a_ids else random.choice(team_a_ids)
+    cap_b = old_cap_b if old_cap_b in team_b_ids else random.choice(team_b_ids)
+
+    players_res = (
+        supabase_client.table("players")
+        .select("*")
+        .eq("session_id", session_id)
+        .execute()
+    )
+    player_map = {p["id"]: p for p in (players_res.data or [])}
+
+    rows = []
+    for a in body.assignments:
+        is_cap = (a.team_name == body.team_a_name and a.player_id == cap_a) or \
+                 (a.team_name == body.team_b_name and a.player_id == cap_b)
+        rows.append({
+            "session_id": session_id,
+            "player_id": a.player_id,
+            "team_name": a.team_name,
+            "team_a_name": body.team_a_name,
+            "team_b_name": body.team_b_name,
+            "is_captain": is_cap,
+        })
+
+    supabase_client.table("team_assignments").delete().eq("session_id", session_id).execute()
+    supabase_client.table("team_assignments").insert(rows).execute()
+
+    result = [
+        _build_assignment_out(player_map[r["player_id"]], r["team_name"], r["is_captain"])
+        for r in rows if r["player_id"] in player_map
+    ]
+    return TeamsOut(team_a_name=body.team_a_name, team_b_name=body.team_b_name, assignments=result)
 
 
 @router.post("/{session_id}/teams/add_player", response_model=TeamsOut)

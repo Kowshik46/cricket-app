@@ -284,6 +284,35 @@ select.finput,select.finput-sm{
 .result-team{font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted)}
 .result-score{font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700}
 
+/* ── best performers ─────────────────────────── */
+.bp-team{margin-bottom:12px}
+.bp-team:last-child{margin-bottom:0}
+.bp-team-name{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:5px}
+.bp-row{display:flex;align-items:baseline;gap:6px;padding:3px 0;flex-wrap:wrap}
+.bp-icon{flex-shrink:0;font-size:.85rem}
+.bp-name{font-family:'DM Mono',monospace;font-size:.78rem;color:var(--cream);white-space:nowrap}
+.bp-stat{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);margin-left:auto}
+
+/* ── play-again options ──────────────────────── */
+.pa-opt-btn{display:block;width:100%;padding:13px 15px;margin-bottom:8px;border-radius:10px;background:rgba(253,246,227,.04);border:1px solid var(--cb);color:var(--cream);font-family:'DM Mono',monospace;font-size:.82rem;cursor:pointer;text-align:left;transition:background .15s}
+.pa-opt-btn:last-child{margin-bottom:0}
+.pa-opt-btn:hover{background:rgba(253,246,227,.09)}
+
+/* ── random preview ──────────────────────────── */
+.pa-preview-block{margin-bottom:2px}
+.pa-preview-label{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:5px}
+.pa-player-tags{display:flex;flex-wrap:wrap;gap:5px}
+.pa-player-tag{font-family:'DM Mono',monospace;font-size:.72rem;padding:4px 9px;border-radius:6px;background:rgba(253,246,227,.06);border:1px solid var(--cb);color:var(--cream)}
+.pa-adjust-link{display:block;width:100%;margin-top:12px;padding:8px;background:transparent;border:none;color:var(--gold);font-family:'DM Mono',monospace;font-size:.75rem;cursor:pointer;text-align:center;text-decoration:underline}
+
+/* ── manual team editor ──────────────────────── */
+.pa-editor-hint{font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted);text-align:center;margin-bottom:10px}
+.pa-editor-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pa-col-label{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+.pa-player-chip{display:block;width:100%;margin-bottom:6px;padding:8px 10px;border-radius:8px;border:1px solid var(--cb);background:rgba(253,246,227,.04);color:var(--cream);font-family:'DM Mono',monospace;font-size:.75rem;cursor:pointer;text-align:left;transition:background .15s}
+.pa-player-chip:hover{background:rgba(253,246,227,.1)}
+.pa-chip-arr{color:var(--muted);font-size:.7rem}
+
 /* ── player strip (team-linked) ─────────────── */
 .player-strip{
   background:rgba(255,255,255,.035);border:1px solid var(--cb);

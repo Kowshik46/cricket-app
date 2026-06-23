@@ -63,6 +63,17 @@ class TeamsOut(BaseModel):
     assignments: list[TeamAssignmentOut]
 
 
+class TeamManualAssignment(BaseModel):
+    player_id: str
+    team_name: str
+
+
+class TeamManualEditRequest(BaseModel):
+    team_a_name: str = Field(..., max_length=40)
+    team_b_name: str = Field(..., max_length=40)
+    assignments: list[TeamManualAssignment]
+
+
 class AddToTeamRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=30)
     skill: Literal["beginner", "intermediate", "expert"]
@@ -119,6 +130,24 @@ class MatchPlayerItem(BaseModel):
     is_captain: bool
 
 
+class InningsSummaryItem(BaseModel):
+    innings_number: int
+    batting_team: str
+    bowling_team: str
+    runs: int
+    wickets: int
+    overs_str: str
+    status: str
+
+
+class MatchSummaryItem(BaseModel):
+    id: UUID
+    name: Optional[str]
+    status: str
+    created_at: datetime
+    innings_list: list[InningsSummaryItem]
+
+
 class MatchHistoryItem(BaseModel):
     id: UUID
     name: str
@@ -127,6 +156,7 @@ class MatchHistoryItem(BaseModel):
     team_b_name: Optional[str]
     players: list[MatchPlayerItem]
     toss_history: list[TossHistorySummary]
+    matches: list[MatchSummaryItem] = []
 
 
 class PlayerStatsItem(BaseModel):
@@ -212,6 +242,7 @@ class MatchCreate(BaseModel):
     players_per_side: int = Field(default=6, ge=2, le=11)
     rules_preset: Literal["standard", "box", "gully", "custom"] = "standard"
     rules: Optional[MatchRules] = None  # custom override
+    name: Optional[str] = Field(default=None, max_length=100)
 
 
 class MatchOut(BaseModel):
@@ -223,6 +254,7 @@ class MatchOut(BaseModel):
     players_per_side: int
     rules_preset: str
     watch_code: Optional[str] = None
+    name: Optional[str] = None
     created_at: datetime
 
 
