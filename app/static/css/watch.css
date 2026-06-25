@@ -36,6 +36,24 @@ body {
 .page-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; }
 .page-title em { color: var(--live); font-style: normal; }
 
+/* ── Manual refresh button ─────────────────────────────────────────── */
+.btn-refresh {
+  background: rgba(244,200,66,.08); color: var(--gold);
+  border: 1px solid rgba(244,200,66,.3); border-radius: 8px;
+  width: 36px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; transition: all .15s;
+}
+.btn-refresh:hover { background: rgba(244,200,66,.18); }
+.btn-refresh:active { transform: scale(.94); }
+.btn-refresh:disabled { opacity: .5; cursor: wait; }
+.refresh-icon {
+  font-size: 1.15rem; line-height: 1; font-weight: 700;
+  display: inline-block; transition: transform .4s ease;
+}
+.btn-refresh.spinning .refresh-icon { animation: refresh-spin .8s linear infinite; }
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
+
 /* ── Card ───────────────────────────────────────────────────────────── */
 .card {
   background: var(--card); border: 1px solid var(--border);
@@ -126,6 +144,57 @@ body {
 .sb-sep { color: var(--muted); margin: 0 3px; font-size: 2.2rem; }
 .sb-overs { font-family: 'DM Mono', monospace; font-size: .72rem; color: var(--muted); margin-top: 4px; }
 .sb-extras { font-family: 'DM Mono', monospace; font-size: .7rem; color: var(--gold); margin-top: 4px; }
+
+/* ── Chase banner (2nd innings) ─────────────────────────────────────── */
+.chase-banner {
+  display: flex; align-items: stretch; justify-content: space-between;
+  background: linear-gradient(135deg, rgba(244,200,66,.12), rgba(244,200,66,.04));
+  border: 1px solid rgba(244,200,66,.35); border-radius: 14px;
+  padding: 12px 8px; margin-bottom: 10px; gap: 4px;
+}
+.cb-cell { flex: 1; text-align: center; padding: 2px 4px; }
+.cb-val {
+  font-family: 'Playfair Display', serif; font-size: 1.6rem; font-weight: 900;
+  color: var(--cream); line-height: 1; letter-spacing: -.5px;
+}
+.cb-val.cb-rrr { color: var(--gold); font-size: 1.4rem; }
+.cb-lbl {
+  font-family: 'DM Mono', monospace; font-size: .56rem; color: var(--muted);
+  letter-spacing: 1.2px; text-transform: uppercase; margin-top: 4px;
+}
+.cb-sep { width: 1px; background: rgba(244,200,66,.18); }
+.chase-banner.urgent { border-color: rgba(239,68,68,.5); background: linear-gradient(135deg, rgba(239,68,68,.16), rgba(239,68,68,.05)); }
+.chase-banner.urgent .cb-val.cb-rrr { color: var(--live); }
+
+/* ── Result card (match complete) ───────────────────────────────────── */
+.result-card {
+  background: linear-gradient(135deg, rgba(116,212,148,.14), rgba(244,200,66,.08));
+  border: 1px solid rgba(116,212,148,.4); border-radius: 16px;
+  padding: 20px 18px; margin-bottom: 10px; text-align: center;
+}
+.rc-trophy { font-size: 2.4rem; margin-bottom: 4px; }
+.rc-title {
+  font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 900;
+  color: var(--cream); margin-bottom: 4px;
+}
+.rc-sub {
+  font-family: 'DM Mono', monospace; font-size: .78rem; color: var(--gold);
+  letter-spacing: .5px; margin-bottom: 14px;
+}
+.rc-scores {
+  display: flex; flex-direction: column; gap: 6px;
+  background: rgba(14,28,40,.55); border-radius: 10px;
+  padding: 10px 14px; margin-top: 8px;
+}
+.rc-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-family: 'DM Mono', monospace; font-size: .8rem;
+}
+.rc-row .rc-team { color: var(--cream); font-weight: 500; }
+.rc-row .rc-team small { color: var(--muted); font-size: .62rem; margin-left: 6px; letter-spacing: 1px; }
+.rc-row .rc-score { color: var(--cream); font-weight: 700; font-size: .92rem; letter-spacing: .3px; }
+.rc-row.rc-winner .rc-team,
+.rc-row.rc-winner .rc-score { color: var(--green); }
 
 /* ── Player strip ────────────────────────────────────────────────────── */
 .player-strip {

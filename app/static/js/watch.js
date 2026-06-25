@@ -32,6 +32,7 @@ function showEntry() {
   clearPoll();
   setVis('entryCard', true); setVis('errorCard', false);
   setVis('loadingCard', false); setVis('matchContent', false);
+  setVis('btnRefresh', false);
 }
 
 function showLoading() {
@@ -45,11 +46,13 @@ function showError(title, msg) {
   document.getElementById('errorMsg').textContent   = msg;
   setVis('entryCard', false); setVis('errorCard', true);
   setVis('loadingCard', false); setVis('matchContent', false);
+  setVis('btnRefresh', false);
 }
 
 function showMatch() {
   setVis('entryCard', false); setVis('errorCard', false);
   setVis('loadingCard', false); setVis('matchContent', true);
+  setVis('btnRefresh', true);
 }
 
 function goWatch() {
@@ -97,6 +100,23 @@ function clearPoll() {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
 }
 
+// Manual refresh — bypass the 5s poll. Used when the spectator wants the
+// latest ball NOW instead of waiting up to 5s for the next auto-poll.
+let _refreshing = false;
+async function manualRefresh() {
+  if (_refreshing) return;
+  _refreshing = true;
+  const btn = document.getElementById('btnRefresh');
+  if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
+  clearPoll();
+  try {
+    await fetchAndRender();
+  } finally {
+    _refreshing = false;
+    if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // NAME MAP — covers at-crease players not yet in ball events
 // ═══════════════════════════════════════════════════════════════
@@ -121,24 +141,29 @@ function renderAll(data) {
   const { match_name, watch_code, scorecard } = data;
   const match   = scorecard.match;
   const innings = scorecard.innings_list || [];
+  const isComplete = match.status === 'completed';
 
   document.getElementById('wMatchName').textContent = match_name;
   document.getElementById('wCodeBadge').textContent = watch_code || '';
 
   renderStatusPill(match.status);
+  renderResultCard(innings, match, isComplete);
 
   // Find the active (live) innings to show in the scoreboard
   const activeInn = innings.find(i => i.innings.status === 'live') || innings[innings.length - 1];
   if (activeInn) {
     renderScoreboard(activeInn, match);
     renderPlayerStrip(activeInn);
+    renderChaseBanner(activeInn, match, isComplete);
   }
 
   renderFeed(innings, match);
   renderScorecard(innings, match);
 
+  const timeStr = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
   document.getElementById('lastUpdated').textContent =
-    '🔄 Updated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    isComplete ? '🔄 Updated ' + timeStr + ' · auto-refresh stopped'
+               : '🔄 Updated ' + timeStr + ' · refreshes every 5s';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -171,19 +196,107 @@ function renderScoreboard(inn, match) {
   document.getElementById('wOvers').textContent    = `${fmt(inn.total_overs)} / ${match.overs} overs`;
   document.getElementById('wRR').textContent       = inn.run_rate?.toFixed(2) ?? '0.00';
 
+  // Compact target line shown only in innings 1 break or once the chase is decided —
+  // the prominent chase numbers live in the dedicated chase banner below.
   const extrasEl = document.getElementById('wExtras');
-  if (inn.target != null) {
-    const need = inn.target - inn.total_runs;
-    if (inn.required_run_rate != null && inn.required_run_rate > 0) {
-      extrasEl.textContent = `Target ${inn.target} · Need ${need > 0 ? need : 0} · RRR ${inn.required_run_rate.toFixed(2)}`;
-      extrasEl.style.display = '';
-    } else {
-      extrasEl.textContent = `Target ${inn.target}`;
-      extrasEl.style.display = '';
-    }
+  if (inn.target != null && match.status !== 'live') {
+    extrasEl.textContent = `Target ${inn.target}`;
+    extrasEl.style.display = '';
   } else {
     extrasEl.style.display = 'none';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHASE BANNER — shown only in the 2nd innings while LIVE
+// ═══════════════════════════════════════════════════════════════
+
+function renderChaseBanner(inn, match, isComplete) {
+  const banner = document.getElementById('chaseBanner');
+  const isChase = inn.innings.innings_number === 2 && inn.target != null;
+
+  // Hide unless we're in a live chase (no point showing it in 1st innings or
+  // after the match is decided — the result card covers that)
+  if (!isChase || isComplete) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  const need = Math.max(0, inn.target - inn.total_runs);
+  const legalBalls = (inn.balls || []).filter(b => b.is_legal_ball).length;
+  const ballsLeft  = Math.max(0, match.overs * 6 - legalBalls);
+
+  document.getElementById('cbNeed').textContent  = need;
+  document.getElementById('cbBalls').textContent = ballsLeft;
+  document.getElementById('cbRRR').textContent   =
+    (ballsLeft > 0 && need > 0 && inn.required_run_rate != null)
+      ? inn.required_run_rate.toFixed(2)
+      : '—';
+
+  // Mark the banner urgent (red) when the chase tightens — > 12 RPO is hard work
+  banner.classList.toggle('urgent', inn.required_run_rate != null && inn.required_run_rate > 12);
+  banner.style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESULT CARD — shown only when match.status === 'completed'
+// ═══════════════════════════════════════════════════════════════
+
+function renderResultCard(innings, match, isComplete) {
+  const card = document.getElementById('resultCard');
+  if (!isComplete || innings.length === 0) {
+    card.style.display = 'none';
+    return;
+  }
+
+  const inn1 = innings[0];
+  const inn2 = innings.length > 1 ? innings[1] : null;
+
+  let title = 'Match Complete';
+  let sub   = '';
+  let trophy = '🏆';
+  let winnerTeam = null;
+
+  if (inn1 && inn2) {
+    const diff = inn2.total_runs - inn1.total_runs;
+    if (diff > 0) {
+      // Chasing side won — wickets remaining
+      const wktsLeft = Math.max(0, (match.players_per_side - 1) - inn2.total_wickets);
+      winnerTeam = inn2.innings.batting_team;
+      title = `${winnerTeam} won!`;
+      sub   = `by ${wktsLeft} wicket${wktsLeft !== 1 ? 's' : ''}`;
+    } else if (diff < 0) {
+      // Setting side defended
+      winnerTeam = inn1.innings.batting_team;
+      title = `${winnerTeam} won!`;
+      sub   = `by ${Math.abs(diff)} run${Math.abs(diff) !== 1 ? 's' : ''}`;
+    } else {
+      title = 'Match Tied!';
+      sub   = 'What a finish!';
+      trophy = '🤝';
+    }
+  } else if (inn1) {
+    // Only one innings — match abandoned/incomplete
+    sub = `${inn1.innings.batting_team} ${inn1.total_runs}/${inn1.total_wickets}`;
+  }
+
+  document.getElementById('rcTrophy').textContent = trophy;
+  document.getElementById('rcTitle').textContent  = title;
+  document.getElementById('rcSub').textContent    = sub;
+
+  // Both teams' final scores
+  const rowHtml = (inn, label) => {
+    if (!inn) return '';
+    const isWinner = winnerTeam && inn.innings.batting_team === winnerTeam;
+    return `<div class="rc-row${isWinner ? ' rc-winner' : ''}">
+      <span class="rc-team">${esc(inn.innings.batting_team)} <small>${label}</small></span>
+      <span class="rc-score">${inn.total_runs}/${inn.total_wickets} (${fmt(inn.total_overs)})</span>
+    </div>`;
+  };
+  document.getElementById('rcScores').innerHTML =
+    rowHtml(inn1, '1st Inn') + rowHtml(inn2, '2nd Inn');
+
+  card.style.display = '';
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -48,6 +48,9 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
   - **"Follow a Live Match"** button on the home page — styled as a prominent gold filled button (`.follow-btn`) with a pulsing red `.live-dot` indicator; opens `#followMatchModal` → enter code → `/watch?code=XXXXXX`
   - `/watch` page (`watch.html`) polls `GET /api/watch/{code}` every 5s while live; stops on completion
   - Spectator view: live score, current over balls, player-at-crease strip, batting/bowling scorecard tabs
+  - **Chase banner** (`#chaseBanner` in `watch.html`) — only shown in 2nd innings live: 3-cell row with `RUNS NEEDED · BALLS LEFT · REQ RR`. Goes red when RRR > 12
+  - **Result card** (`#resultCard`) — shown when `match.status === 'completed'`: trophy + winning team + margin (`by N runs` / `by N wickets`); falls back to "Match Tied!" on equal totals
+  - **Manual refresh button** (🔄 in header) — `manualRefresh()` in `watch.js` cancels the current poll, fetches immediately, then reschedules. Auto-poll continues to run every 5s in the background unless the match is complete (then it stops and the `lastUpdated` text says so)
   - QR code generated client-side via `qrcode.js` (cdnjs CDN); no extra backend dependency
 - Profile page — display name, email/password management, match history, player stats
 - Forgot password flow via Supabase email reset

@@ -16,7 +16,10 @@
   <div class="page-header">
     <a class="btn-back" href="/">← Home</a>
     <div class="page-title">🔴 <em>Live</em> Watch</div>
-    <div style="width:60px"></div>
+    <button class="btn-refresh" id="btnRefresh" onclick="manualRefresh()"
+            title="Refresh now" aria-label="Refresh score" style="display:none">
+      <span class="refresh-icon">↻</span>
+    </button>
   </div>
 
   <!-- ── Entry card (shown when no code in URL) ── -->
@@ -56,6 +59,14 @@
     <!-- Status pill -->
     <div class="status-pill" id="statusPill"></div>
 
+    <!-- Result card (shown only when match is completed) -->
+    <div class="result-card" id="resultCard" style="display:none">
+      <div class="rc-trophy" id="rcTrophy">🏆</div>
+      <div class="rc-title" id="rcTitle">Match Complete</div>
+      <div class="rc-sub" id="rcSub"></div>
+      <div class="rc-scores" id="rcScores"></div>
+    </div>
+
     <!-- Scoreboard -->
     <div class="scoreboard" id="scoreboard">
       <div class="sb-top">
@@ -73,6 +84,24 @@
       </div>
       <div class="sb-overs" id="wOvers">0.0 / — overs</div>
       <div class="sb-extras" id="wExtras" style="display:none"></div>
+    </div>
+
+    <!-- Chase banner (2nd innings live only) -->
+    <div class="chase-banner" id="chaseBanner" style="display:none">
+      <div class="cb-cell">
+        <div class="cb-val" id="cbNeed">—</div>
+        <div class="cb-lbl">RUNS NEEDED</div>
+      </div>
+      <div class="cb-sep"></div>
+      <div class="cb-cell">
+        <div class="cb-val" id="cbBalls">—</div>
+        <div class="cb-lbl">BALLS LEFT</div>
+      </div>
+      <div class="cb-sep"></div>
+      <div class="cb-cell">
+        <div class="cb-val cb-rrr" id="cbRRR">—</div>
+        <div class="cb-lbl">REQ RR</div>
+      </div>
     </div>
 
     <!-- Player strip -->
