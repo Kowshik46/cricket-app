@@ -16,6 +16,7 @@
   <div class="page-header">
     <a class="btn-back" href="/">← Home</a>
     <div class="page-title">Cricket <em>Score</em></div>
+    <span id="syncStatus" class="sync-pill" style="display:none"></span>
     <button class="btn-share" id="btnShare" onclick="openShareModal()" style="display:none">📤 Share</button>
   </div>
 
@@ -113,6 +114,16 @@
        SCORING VIEW
   ══════════════════════════════════════════ -->
   <div class="view" id="viewScoring">
+
+    <!-- Hydration overlay: blocks scoring until engine state is loaded.
+         Shown by hydrateEngine() in score.js; hidden only on success. -->
+    <div id="hydrateOverlay">
+      <div class="hydrate-box">
+        <div class="hydrate-spinner"></div>
+        <p id="hydrateMsg">Loading match…</p>
+        <button id="hydrateRetryBtn" class="btnprim" style="display:none" onclick="retryHydrate()">Retry</button>
+      </div>
+    </div>
 
     <!-- Tab strip: Live | Scorecard -->
     <div class="score-tabs" style="margin-top:4px">

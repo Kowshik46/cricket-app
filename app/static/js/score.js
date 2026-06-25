@@ -1,4 +1,492 @@
 // ═══════════════════════════════════════════════════════════════
+// GAME ENGINE — client-side scoring logic
+// Replicates app/routers/matches.py helpers so the server is
+// only used for persistence, not for state derivation.
+// ═══════════════════════════════════════════════════════════════
+
+class GameEngine {
+  constructor() { this.reset(); }
+
+  reset() {
+    this.overs = 6;
+    this.maxWickets = 5;
+    this.rules = {};
+
+    this.inningsRow = null;
+    this.overAssignments = [];
+
+    this.totalRuns = 0;
+    this.totalWickets = 0;
+    this.totalExtras = 0;
+    this.legalBalls = 0;
+
+    this.strikerId = null;
+    this.nonStrikerId = null;
+    this.bowlerId = null;
+    this.nextBallIsFreeHit = false;
+
+    this._balls = [];
+
+    this._batterStats = {};
+    this._bowlerStats = {};
+    this._bowlerLegalOvers = {};
+    this._bowlerThrowOvers = {};
+
+    this.dismissedIds = new Set();
+
+    this._playerNames = {};
+    this.battingPlayers = [];
+    this.bowlingPlayers = [];
+  }
+
+  init(inningsRow, rules, overs, maxWickets, battingPlayers, bowlingPlayers) {
+    this.reset();
+    this.inningsRow = inningsRow;
+    this.rules = rules || {};
+    this.overs = overs;
+    this.maxWickets = maxWickets;
+
+    this.battingPlayers = battingPlayers || [];
+    this.bowlingPlayers = bowlingPlayers || [];
+    for (const p of this.battingPlayers) this._playerNames[String(p.id)] = p.name;
+    for (const p of this.bowlingPlayers) this._playerNames[String(p.id)] = p.name;
+
+    if (inningsRow && inningsRow.opening_striker_id) {
+      this.strikerId = String(inningsRow.opening_striker_id);
+      this.nonStrikerId = inningsRow.opening_non_striker_id ? String(inningsRow.opening_non_striker_id) : null;
+    }
+  }
+
+  rebuild(storedBalls, overAssignments, inningsRow, rules, overs, maxWickets, battingPlayers, bowlingPlayers) {
+    this.init(inningsRow, rules, overs, maxWickets, battingPlayers, bowlingPlayers);
+    this.overAssignments = (overAssignments || []).map(o => ({
+      over_number: o.over_number,
+      bowler_id: o.bowler_id ? String(o.bowler_id) : null,
+      bowl_type: o.bowl_type || 'legal',
+    }));
+
+    const overMap = {};
+    for (const ov of this.overAssignments) {
+      overMap[ov.over_number] = ov.bowler_id || null;
+      if (ov.bowler_id) {
+        if (ov.bowl_type === 'throw') {
+          this._bowlerThrowOvers[ov.bowler_id] = (this._bowlerThrowOvers[ov.bowler_id] || 0) + 1;
+        } else {
+          this._bowlerLegalOvers[ov.bowler_id] = (this._bowlerLegalOvers[ov.bowler_id] || 0) + 1;
+        }
+      }
+    }
+
+    this.bowlerId = overMap[0] || null;
+
+    for (const ball of (storedBalls || [])) {
+      this._applyStoredBall(ball, overMap);
+    }
+  }
+
+  _applyStoredBall(ball, overMap) {
+    let meta = ball.metadata;
+    if (!meta || typeof meta !== 'object') meta = {};
+
+    if (meta.new_non_striker_id) {
+      this.nonStrikerId = String(meta.new_non_striker_id);
+    }
+
+    if (ball.bowler_id) this.bowlerId = String(ball.bowler_id);
+
+    this._updateBatterStats(ball);
+    this._updateBowlerStats(ball);
+
+    this.totalRuns += (ball.runs || 0) + (ball.extras || 0);
+    if (ball.event_type === 'wicket') this.totalWickets++;
+    this.totalExtras += (ball.extras || 0);
+
+    this.nextBallIsFreeHit = ball.event_type === 'no_ball' && !!this.rules.free_hit_enabled;
+
+    let rot = 0;
+    if (ball.event_type === 'wide') rot = 0;
+    else if (ball.event_type === 'bye' || ball.event_type === 'leg_bye') rot = ball.extras || 0;
+    else rot = ball.runs || 0;
+
+    if (rot % 2 === 1) {
+      const tmp = this.strikerId; this.strikerId = this.nonStrikerId; this.nonStrikerId = tmp;
+    }
+
+    if (ball.is_legal_ball) {
+      this.legalBalls++;
+      if (this.legalBalls % 6 === 0) {
+        const tmp = this.strikerId; this.strikerId = this.nonStrikerId; this.nonStrikerId = tmp;
+        const nxtOver = (this.legalBalls / 6) | 0;
+        this.bowlerId = (overMap && Object.prototype.hasOwnProperty.call(overMap, nxtOver))
+          ? overMap[nxtOver] : null;
+      }
+    }
+
+    if (ball.event_type === 'wicket') {
+      const runOutEnd = meta.run_out_end;
+      const dismissedId = ball.batter_id ? String(ball.batter_id) : null;
+
+      if (runOutEnd === 'non_striker') {
+        if (this.nonStrikerId) this.dismissedIds.add(String(this.nonStrikerId));
+        this.nonStrikerId = null;
+      } else if (dismissedId && dismissedId === String(this.nonStrikerId)) {
+        this.dismissedIds.add(dismissedId);
+        this.nonStrikerId = null;
+      } else {
+        if (this.strikerId) this.dismissedIds.add(String(this.strikerId));
+        else if (dismissedId) this.dismissedIds.add(dismissedId);
+        this.strikerId = null;
+      }
+    }
+
+    this._balls.push(ball);
+  }
+
+  applyBall(input) {
+    const isLegal = this._isLegal(input.event_type);
+    const extras  = this._extrasFor(input.event_type, input.runs || 0);
+    const scored  = this._runsFor(input.event_type, input.runs || 0);
+
+    const overNum = (this.legalBalls / 6) | 0;
+    const ballNum = this.legalBalls % 6;
+
+    const meta = input.metadata || {};
+
+    const ball = {
+      event_type:    input.event_type,
+      runs:          scored,
+      extras:        extras,
+      extra_type:    input.extra_type || null,
+      is_legal_ball: isLegal,
+      is_boundary:   input.is_boundary || false,
+      boundary_type: input.boundary_type || null,
+      wicket_type:   input.wicket_type || null,
+      batter_id:     input.batter_id || null,
+      bowler_id:     input.bowler_id || null,
+      metadata:      meta,
+      over_number:   overNum,
+      ball_number:   ballNum,
+    };
+
+    const overMap = {};
+    for (const ov of this.overAssignments) {
+      overMap[ov.over_number] = ov.bowler_id || null;
+    }
+
+    this._applyStoredBall(ball, overMap);
+
+    const overJustDone   = isLegal && this.legalBalls > 0 && this.legalBalls % 6 === 0;
+    const wasWicket      = input.event_type === 'wicket';
+    const needsNewBatter = wasWicket && (this.strikerId === null || this.nonStrikerId === null);
+    const needsNewBowler = overJustDone && this.bowlerId === null;
+
+    return {
+      overJustDone,
+      needsNewBatter,
+      needsNewBowler,
+      newBatterPosition: this.strikerId === null ? 'striker' : 'non_striker',
+      inningsEnded: this.isInningsOver(),
+    };
+  }
+
+  undo(overAssignments) {
+    if (this._balls.length === 0) return false;
+
+    const poppedBalls = this._balls.slice(0, -1);
+    const overs = overAssignments || this.overAssignments;
+    const savedRow   = this.inningsRow;
+    const savedRules = this.rules;
+    const savedOvers = this.overs;
+    const savedMax   = this.maxWickets;
+    const savedBat   = this.battingPlayers;
+    const savedBowl  = this.bowlingPlayers;
+
+    this.rebuild(poppedBalls, overs, savedRow, savedRules, savedOvers, savedMax, savedBat, savedBowl);
+    return true;
+  }
+
+  addOverAssignment(overNumber, bowlerId, bowlType) {
+    const bid = String(bowlerId);
+    this.overAssignments = this.overAssignments.filter(o => o.over_number !== overNumber);
+    this.overAssignments.push({ over_number: overNumber, bowler_id: bid, bowl_type: bowlType });
+    this.bowlerId = bid;
+
+    if (bowlType === 'throw') {
+      this._bowlerThrowOvers[bid] = (this._bowlerThrowOvers[bid] || 0) + 1;
+    } else {
+      this._bowlerLegalOvers[bid] = (this._bowlerLegalOvers[bid] || 0) + 1;
+    }
+  }
+
+  seatBatter(playerId, position) {
+    const pid = String(playerId);
+    if (position === 'striker') this.strikerId = pid;
+    else this.nonStrikerId = pid;
+  }
+
+  getScorecard() {
+    const legalComplete = (this.legalBalls / 6) | 0;
+    const ballsInOver   = this.legalBalls % 6;
+    const totalOvers    = parseFloat((legalComplete + ballsInOver / 10).toFixed(1));
+    const runRate       = this.legalBalls > 0
+      ? parseFloat((this.totalRuns / (this.legalBalls / 6)).toFixed(2))
+      : 0.0;
+
+    const innings = this.inningsRow ? {
+      id: this.inningsRow.id,
+      innings_number: this.inningsRow.innings_number,
+      batting_team: this.inningsRow.batting_team,
+      bowling_team: this.inningsRow.bowling_team,
+      target: this.inningsRow.target,
+      status: this.inningsRow.status,
+    } : null;
+
+    return {
+      innings,
+      total_runs:             this.totalRuns,
+      total_wickets:          this.totalWickets,
+      total_overs:            totalOvers,
+      run_rate:               runRate,
+      target:                 this.inningsRow ? this.inningsRow.target : null,
+      balls:                  [...this._balls],
+      current_striker_id:     this.strikerId,
+      current_non_striker_id: this.nonStrikerId,
+      current_bowler_id:      this.bowlerId,
+      current_over_number:    (this.legalBalls / 6) | 0,
+      batters:                this._getBatterStats(),
+      bowlers:                this._getBowlerStats(),
+    };
+  }
+
+  isInningsOver() {
+    return this.totalWickets >= this.maxWickets || this.legalBalls >= this.overs * 6;
+  }
+
+  getEligibleBatters(allBattingPlayers) {
+    const atCrease = new Set();
+    if (this.strikerId) atCrease.add(String(this.strikerId));
+    if (this.nonStrikerId) atCrease.add(String(this.nonStrikerId));
+    return (allBattingPlayers || []).filter(p =>
+      !this.dismissedIds.has(String(p.id)) && !atCrease.has(String(p.id))
+    );
+  }
+
+  getEligibleBowlers(allBowlingPlayers) {
+    const maxOvPerBowler = this.rules.max_overs_per_bowler != null ? this.rules.max_overs_per_bowler : null;
+    const maxThrowOv     = this.rules.max_throw_overs_per_team != null ? this.rules.max_throw_overs_per_team : null;
+    const totalThrowSoFar = Object.values(this._bowlerThrowOvers).reduce((s, n) => s + n, 0);
+
+    const currentOver = (this.legalBalls / 6) | 0;
+    const lastOverNum = currentOver - 1;
+    const lastOverAssign = this.overAssignments.find(o => o.over_number === lastOverNum);
+    const prevBowlerId = lastOverAssign ? lastOverAssign.bowler_id : null;
+
+    return (allBowlingPlayers || []).map(p => {
+      const pid = String(p.id);
+      const legalOv = this._bowlerLegalOvers[pid] || 0;
+      const throwOv = this._bowlerThrowOvers[pid] || 0;
+      const totalOvers = legalOv + throwOv;
+
+      const blockedConsecutive = prevBowlerId && pid === String(prevBowlerId);
+      const blockedCap         = maxOvPerBowler !== null && totalOvers >= maxOvPerBowler;
+      const teamThrowCapHit    = maxThrowOv !== null && totalThrowSoFar >= maxThrowOv;
+
+      let reason = null;
+      if (blockedConsecutive) reason = 'consecutive';
+      else if (blockedCap)    reason = 'overs_cap';
+
+      return {
+        id:                 pid,
+        name:               p.name,
+        overs_bowled:       totalOvers,
+        throw_overs_bowled: throwOv,
+        bowl_type:          p.bowl_type || 'legal',
+        can_legal:          reason === null,
+        can_throw:          reason === null && !teamThrowCapHit,
+        reason_blocked:     reason,
+      };
+    });
+  }
+
+  _isLegal(eventType) {
+    if (eventType === 'wide')      return !!this.rules.wide_counts_as_ball;
+    if (eventType === 'no_ball')   return !!this.rules.no_ball_counts_as_ball;
+    if (eventType === 'dead_ball') return false;
+    return true;
+  }
+
+  _extrasFor(eventType, runs) {
+    if (eventType === 'wide')    return this.rules.wide_runs != null ? this.rules.wide_runs : 1;
+    if (eventType === 'no_ball') return this.rules.no_ball_runs != null ? this.rules.no_ball_runs : 1;
+    if (eventType === 'bye' || eventType === 'leg_bye') return runs;
+    return 0;
+  }
+
+  _runsFor(eventType, runs) {
+    if (eventType === 'wide' || eventType === 'bye' || eventType === 'leg_bye') return 0;
+    return runs;
+  }
+
+  _updateBatterStats(ball) {
+    const pid = ball.batter_id ? String(ball.batter_id) : null;
+    if (!pid) return;
+
+    if (!this._batterStats[pid]) {
+      this._batterStats[pid] = { runs: 0, balls: 0, fours: 0, sixes: 0, dismissed: false, dismissal: null };
+    }
+    const s = this._batterStats[pid];
+
+    const ev = ball.event_type;
+    if (ev !== 'wide' && ev !== 'bye' && ev !== 'leg_bye') s.runs += ball.runs || 0;
+    if (ev !== 'wide') s.balls++;
+    if (ball.is_boundary) {
+      if (ball.boundary_type === 'four') s.fours++;
+      else if (ball.boundary_type === 'six') s.sixes++;
+    }
+    if (ev === 'wicket') {
+      s.dismissed = true;
+      s.dismissal = ball.wicket_type || 'out';
+    }
+  }
+
+  _updateBowlerStats(ball) {
+    const pid = ball.bowler_id ? String(ball.bowler_id) : null;
+    if (!pid) return;
+
+    if (!this._bowlerStats[pid]) {
+      this._bowlerStats[pid] = { runs: 0, legal: 0, wickets: 0 };
+    }
+    const s = this._bowlerStats[pid];
+    s.runs += (ball.runs || 0) + (ball.extras || 0);
+    if (ball.is_legal_ball) s.legal++;
+    if (ball.event_type === 'wicket' && ball.wicket_type !== 'run_out') s.wickets++;
+  }
+
+  _getBatterStats() {
+    return Object.entries(this._batterStats).map(([pid, s]) => {
+      const sr = s.balls > 0 ? parseFloat((s.runs / s.balls * 100).toFixed(1)) : 0.0;
+      return {
+        player_id:   pid,
+        name:        this._playerNames[pid] || 'Unknown',
+        runs:        s.runs,
+        balls:       s.balls,
+        fours:       s.fours,
+        sixes:       s.sixes,
+        strike_rate: sr,
+        status:      s.dismissed ? 'out' : 'batting',
+        dismissal:   s.dismissal,
+      };
+    });
+  }
+
+  _getBowlerStats() {
+    const allIds = new Set([
+      ...Object.keys(this._bowlerStats),
+      ...Object.keys(this._bowlerLegalOvers),
+      ...Object.keys(this._bowlerThrowOvers),
+    ]);
+    return [...allIds].map(pid => {
+      const s = this._bowlerStats[pid] || { runs: 0, legal: 0, wickets: 0 };
+      const lOv = this._bowlerLegalOvers[pid] || 0;
+      const tOv = this._bowlerThrowOvers[pid] || 0;
+      const econ = s.legal > 0 ? parseFloat((s.runs / (s.legal / 6)).toFixed(2)) : 0.0;
+      return {
+        player_id:    pid,
+        name:         this._playerNames[pid] || 'Unknown',
+        overs:        (s.legal / 6) | 0,
+        balls_legal:  s.legal % 6,
+        runs_conceded: s.runs,
+        wickets:      s.wickets,
+        economy:      econ,
+        bowl_type:    tOv > lOv ? 'throw' : 'legal',
+        legal_overs:  lOv,
+        throw_overs:  tOv,
+      };
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BALL QUEUE — serialises POST /ball requests to the server.
+// The client never sends ball N+1 until ball N is confirmed, so
+// the ball_events timeline ordering in the DB is preserved.
+// ═══════════════════════════════════════════════════════════════
+
+class BallQueue {
+  constructor() {
+    this._queue   = [];
+    this._running = false;
+    this._inFlight = false;
+    this._syncEl  = null;
+  }
+
+  setSyncIndicator(el) { this._syncEl = el; }
+
+  enqueue(ballData, postFn) {
+    this._queue.push({ ballData, postFn });
+    if (!this._running) this._drain();
+    else this._updateIndicator();
+  }
+
+  get pendingCount() { return this._queue.length; }
+  get isIdle() { return !this._running && this._queue.length === 0; }
+
+  async _drain() {
+    this._running = true;
+    this._updateIndicator();
+
+    while (this._queue.length > 0) {
+      const { ballData, postFn } = this._queue[0];
+      this._inFlight = true;
+      try {
+        await postFn(ballData);
+        this._inFlight = false;
+        this._queue.shift();
+      } catch (err) {
+        this._inFlight = false;
+        console.error('BallQueue: POST failed', err);
+        try { toast('Sync error — check connection', true); } catch(_) {}
+        break;
+      }
+      this._updateIndicator();
+    }
+
+    this._running = false;
+    this._updateIndicator();
+  }
+
+  async retry() {
+    if (!this._running && this._queue.length > 0) {
+      await this._drain();
+    }
+  }
+
+  async drain() {
+    if (!this._running && this._queue.length > 0) this._drain();
+    while (this._running || this._queue.length > 0) {
+      await new Promise(r => setTimeout(r, 80));
+    }
+  }
+
+  clear() { this._queue = this._inFlight ? this._queue.slice(0, 1) : []; this._updateIndicator(); }
+
+  _updateIndicator() {
+    if (!this._syncEl) return;
+    if (this._queue.length === 0) {
+      this._syncEl.textContent = '';
+      this._syncEl.style.display = 'none';
+    } else {
+      this._syncEl.textContent = `Syncing ${this._queue.length}…`;
+      this._syncEl.style.display = '';
+    }
+  }
+}
+
+// ── Module-level engine + queue ────────────────────────────────
+const engine = new GameEngine();
+const ballQueue = new BallQueue();
+
+// ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
 
@@ -182,6 +670,10 @@ function buildRulesObject(extra = {}) {
   // default toggles ON
   ['tgl-wide','tgl-nb','tgl-fh'].forEach(id => document.getElementById(id).classList.add('on'));
 
+  // Wire the sync pill to the ball queue so the user sees pending POSTs
+  const syncEl = document.getElementById('syncStatus');
+  if (syncEl) ballQueue.setSyncIndicator(syncEl);
+
   if (isTeamLinked) {
     await loadTeamLinkedSetup();
   }
@@ -252,7 +744,7 @@ async function startMatch() {
 
     showView('viewScoring');
     updateScoringHeader();
-    await refreshScorecard();
+    await hydrateEngine(match.id, inn.id);
   } catch(e) {
     toast(e.message, true);
   }
@@ -288,73 +780,155 @@ async function refreshScorecard() {
   } catch(e) { /* ignore on first load */ }
 }
 
+// ── Hydration overlay + engine bootstrap ─────────────────────
+let _hydrateArgs = null;
+
+function _showHydrateOverlay(msg, showRetry = false) {
+  const ov  = document.getElementById('hydrateOverlay');
+  const msgEl = document.getElementById('hydrateMsg');
+  const btn = document.getElementById('hydrateRetryBtn');
+  if (!ov) return;
+  ov.style.display = 'flex';
+  if (msgEl) msgEl.textContent = msg;
+  if (btn)  btn.style.display = showRetry ? '' : 'none';
+}
+
+function _hideHydrateOverlay() {
+  const ov = document.getElementById('hydrateOverlay');
+  if (ov) ov.style.display = 'none';
+}
+
+async function retryHydrate() {
+  if (!_hydrateArgs) return;
+  await hydrateEngine(_hydrateArgs[0], _hydrateArgs[1]);
+}
+
+// Fetches stored timeline + rules + over assignments and rebuilds the engine.
+// CRITICAL: never let the user score if hydration fails — the overlay stays
+// in place with a Retry button until the fetch succeeds.
+async function hydrateEngine(matchId, inningsId) {
+  _hydrateArgs = [matchId, inningsId];
+  _showHydrateOverlay('Loading match…');
+
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAY  = 2000;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const [inningsResp, rules, balls, overs] = await Promise.all([
+        api('GET', `/matches/${matchId}/innings`),
+        api('GET', `/matches/${matchId}/rules`),
+        api('GET', `/matches/${matchId}/innings/${inningsId}/timeline`),
+        api('GET', `/matches/${matchId}/innings/${inningsId}/overs`),
+      ]);
+
+      const inningsRow = (inningsResp || []).find(i => i.id === inningsId);
+      if (!inningsRow) throw new Error('Innings record not found');
+
+      engine.rebuild(
+        balls,
+        overs,
+        inningsRow,
+        rules,
+        cfg.overs,
+        cfg.maxWickets,
+        matchState.battingTeamPlayers,
+        matchState.bowlingTeamPlayers,
+      );
+
+      matchState.nextBallIsFreeHit = engine.nextBallIsFreeHit;
+      if (isTeamLinked) {
+        matchState.currentStrikerId    = engine.strikerId;
+        matchState.currentNonStrikerId = engine.nonStrikerId;
+        matchState.currentBowlerId     = engine.bowlerId;
+        matchState.currentOverNumber   = (engine.legalBalls / 6) | 0;
+      }
+
+      const sc = engine.getScorecard();
+      matchState.scorecard = sc;
+      renderBoard(sc);
+      setFreehitBanner(engine.nextBallIsFreeHit);
+      _hideHydrateOverlay();
+      return;
+
+    } catch (err) {
+      console.error(`hydrateEngine attempt ${attempt} failed:`, err);
+      if (attempt < MAX_ATTEMPTS) {
+        _showHydrateOverlay(`Loading… (attempt ${attempt + 1} of ${MAX_ATTEMPTS})`);
+        await new Promise(r => setTimeout(r, RETRY_DELAY));
+      } else {
+        _showHydrateOverlay('Could not load match state. Check your connection and tap Retry.', true);
+        throw new Error('Hydration failed after ' + MAX_ATTEMPTS + ' attempts');
+      }
+    }
+  }
+}
+
 async function postBall(body) {
-  // Tag free-hit if active
+  // Tag free-hit if currently active
   if (matchState.nextBallIsFreeHit) {
     body.metadata = { ...(body.metadata || {}), free_hit: true };
   }
 
-  // Attach batter/bowler IDs for team-linked mode
+  // Attach batter/bowler IDs and piggybacks for team-linked mode
   if (isTeamLinked) {
     if (!body.batter_id) {
-      body.batter_id = matchState.pendingBatterId || matchState.currentStrikerId || undefined;
+      body.batter_id = matchState.pendingBatterId || engine.strikerId || undefined;
     }
     if (!body.bowler_id) {
-      body.bowler_id = matchState.currentBowlerId || undefined;
+      body.bowler_id = engine.bowlerId || undefined;
     }
-    // Piggyback pending new non-striker onto metadata (after non-striker run-out)
     if (_pendingNonStrikerId) {
       body.metadata = { ...(body.metadata || {}), new_non_striker_id: _pendingNonStrikerId };
     }
   }
 
-  try {
-    const sc = await api('POST', `/matches/${matchState.matchId}/innings/${matchState.inningsId}/ball`, body);
-    matchState.scorecard = sc;
+  // Apply to local engine INSTANTLY (no await — runs synchronously)
+  const result = engine.applyBall(body);
 
-    // Free-hit logic
-    const wasNoBall = body.event_type === 'no_ball';
-    if (!wasNoBall) matchState.nextBallIsFreeHit = false;
-    if (wasNoBall && cfg.rules.free_hit) matchState.nextBallIsFreeHit = true;
+  // Clear consumed pending state
+  matchState.pendingBatterId = null;
+  _pendingNonStrikerId = null;
 
-    setFreehitBanner(matchState.nextBallIsFreeHit);
-
-    if (isTeamLinked) {
-      matchState.currentStrikerId    = sc.current_striker_id;
-      matchState.currentNonStrikerId = sc.current_non_striker_id;
-      matchState.currentBowlerId     = sc.current_bowler_id;
-      matchState.currentOverNumber   = sc.current_over_number;
-      matchState.pendingBatterId = null;  // consumed
-      _pendingNonStrikerId = null;        // consumed
-    }
-
-    renderBoard(sc);
-
-    // Innings-end check — if innings ends, stop here
-    if (checkInningsEnd(sc)) return;
-
-    // Team-linked modal triggers (only when innings continues)
-    if (isTeamLinked) {
-      const legal = sc.balls.filter(isLegal).length;
-      const wasWicket = body.event_type === 'wicket';
-      const overJustDone = legal > 0 && legal % 6 === 0;
-
-      if (wasWicket) {
-        if (sc.current_striker_id === null) {
-          await openNewBatterModal('striker');
-        } else if (sc.current_non_striker_id === null) {
-          // Non-striker run-out: need a replacement at the non-striker end
-          await openNewBatterModal('non_striker');
-        }
-      }
-      // Separate check: new bowler modal fires even when over ends on a wicket
-      if (overJustDone && sc.current_bowler_id === null) {
-        await openNewBowlerModal(sc.current_over_number);
-      }
-    }
-  } catch(e) {
-    toast(e.message, true);
+  // Sync engine state back to matchState for legacy code that reads it
+  if (isTeamLinked) {
+    matchState.currentStrikerId    = engine.strikerId;
+    matchState.currentNonStrikerId = engine.nonStrikerId;
+    matchState.currentBowlerId     = engine.bowlerId;
+    matchState.currentOverNumber   = (engine.legalBalls / 6) | 0;
   }
+  matchState.nextBallIsFreeHit = engine.nextBallIsFreeHit;
+
+  // Render from engine immediately
+  const sc = engine.getScorecard();
+  matchState.scorecard = sc;
+  renderBoard(sc);
+  setFreehitBanner(engine.nextBallIsFreeHit);
+
+  // Queue server persistence (background, fire-and-forget)
+  _queueBall(body);
+
+  // Innings-end check — if innings ends, drain queue then stop
+  if (checkInningsEnd(sc)) return;
+
+  // Trigger modals from engine result (not from server response)
+  if (isTeamLinked) {
+    if (result.needsNewBatter) {
+      await openNewBatterModal(result.newBatterPosition);
+    }
+    if (result.needsNewBowler) {
+      await openNewBowlerModal((engine.legalBalls / 6) | 0);
+    }
+  }
+}
+
+function _queueBall(body) {
+  // Capture current innings ID in closure (may change across innings)
+  const matchId = matchState.matchId;
+  const inningsId = matchState.inningsId;
+  ballQueue.enqueue(body, (b) =>
+    api('POST', `/matches/${matchId}/innings/${inningsId}/ball`, b)
+  );
 }
 
 function setFreehitBanner(show) {
@@ -518,6 +1092,9 @@ function endInnings() {
 }
 
 async function autoEndFirstInnings(sc) {
+  // Make sure the server has every ball before we lock the innings,
+  // otherwise the target it derives could be short by 1–2 deliveries.
+  try { await ballQueue.drain(); } catch(_) {}
   try {
     await api('POST', `/matches/${matchState.matchId}/innings/${matchState.inningsId}/complete`);
   } catch(e) { /* ignore */ }
@@ -566,7 +1143,7 @@ async function startSecondInnings() {
     setFreehitBanner(false);
     showView('viewScoring');
     updateScoringHeader();
-    await refreshScorecard();
+    await hydrateEngine(matchState.matchId, inn.id);
   } catch(e) {
     toast(e.message, true);
   }
@@ -575,6 +1152,9 @@ async function startSecondInnings() {
 // ─── match finish ────────────────────────────────────────────
 
 async function finishMatch(sc) {
+  // Drain queued balls before fetching the final scorecard — Best Performers
+  // and the scorecard view both depend on the server having every delivery.
+  try { await ballQueue.drain(); } catch(_) {}
   try {
     await api('POST', `/matches/${matchState.matchId}/innings/${matchState.inningsId}/complete`);
   } catch(e) { /* ignore */ }
@@ -783,22 +1363,40 @@ function submitWicket() {
 // ── Undo ──────────────────────────────────────────────────────
 async function undoLast() {
   if (!matchState.inningsId) return;
+  if (engine._balls.length === 0) { toast('Nothing to undo'); return; }
+
+  // While balls are still draining to the server, wait — undo on top of an
+  // in-flight ball would race with its POST and leave engine ≠ DB.
+  if (ballQueue.pendingCount > 0) {
+    toast('Still syncing — try again in a moment', true);
+    return;
+  }
+
+  // Roll back engine state from the remaining ball history
+  engine.undo(engine.overAssignments);
+
+  // Sync matchState from engine
+  if (isTeamLinked) {
+    matchState.currentStrikerId    = engine.strikerId;
+    matchState.currentNonStrikerId = engine.nonStrikerId;
+    matchState.currentBowlerId     = engine.bowlerId;
+    matchState.currentOverNumber   = (engine.legalBalls / 6) | 0;
+    matchState.pendingBatterId     = null;
+  }
+  matchState.nextBallIsFreeHit = engine.nextBallIsFreeHit;
+
+  // Render from engine immediately
+  const sc = engine.getScorecard();
+  matchState.scorecard = sc;
+  renderBoard(sc);
+  setFreehitBanner(engine.nextBallIsFreeHit);
+
+  // Tell server to delete the last stored ball (background)
   try {
-    const sc = await api('POST', `/matches/${matchState.matchId}/innings/${matchState.inningsId}/undo`);
-    matchState.scorecard = sc;
-    matchState.nextBallIsFreeHit = false;
-    setFreehitBanner(false);
-    if (isTeamLinked) {
-      matchState.currentStrikerId    = sc.current_striker_id;
-      matchState.currentNonStrikerId = sc.current_non_striker_id;
-      matchState.currentBowlerId     = sc.current_bowler_id;
-      matchState.currentOverNumber   = sc.current_over_number;
-      matchState.pendingBatterId = null;
-    }
-    renderBoard(sc);
+    await api('POST', `/matches/${matchState.matchId}/innings/${matchState.inningsId}/undo`);
     toast('Last ball undone');
   } catch(e) {
-    toast(e.message, true);
+    toast('Undo saved locally but server sync failed', true);
   }
 }
 
@@ -1227,6 +1825,8 @@ function resetToSetup() {
     _openingBowlType:'legal', _newBowlType:'legal',
     _selectedBowlerId:null, _forOver:0,
   };
+  engine.reset();
+  ballQueue.clear();
   cfg.matchNum = 1;
   const t1 = document.getElementById('team1Name');
   const t2 = document.getElementById('team2Name');
@@ -1381,7 +1981,9 @@ async function submitOpeningPair() {
     setFreehitBanner(false);
     showView('viewScoring');
     updateScoringHeader();
-    await refreshScorecard();
+
+    // Hydrate engine from the freshly created innings + over assignment
+    await hydrateEngine(matchState.matchId, inn.id);
   } catch(e) {
     toast(e.message, true);
   } finally {
@@ -1393,33 +1995,39 @@ async function submitOpeningPair() {
 
 async function openNewBatterModal(position = 'striker') {
   _newBatterPosition = position;
-  try {
-    const res = await api('GET',
-      `/matches/${matchState.matchId}/innings/${matchState.inningsId}/eligible_batters`);
-    const batters = res.batters || [];
-    if (!batters.length) return; // innings ended / last man
-    const titleEl = document.querySelector('#newBatterModal h2');
-    if (titleEl) titleEl.textContent = position === 'non_striker' ? 'New Non-Striker In' : 'New Batter In';
-    const sel = document.getElementById('newBatterSel');
-    sel.innerHTML = '<option value="">Pick incoming batter...</option>' +
-      batters.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-    openModal('newBatterModal');
-  } catch(e) {
-    toast(e.message, true);
-  }
+
+  if (!isTeamLinked) return; // quick mode: no batter modal
+
+  const batters = engine.getEligibleBatters(matchState.battingTeamPlayers);
+  if (!batters.length) return; // innings ended / last man
+
+  const titleEl = document.querySelector('#newBatterModal h2');
+  if (titleEl) titleEl.textContent = position === 'non_striker' ? 'New Non-Striker In' : 'New Batter In';
+  const sel = document.getElementById('newBatterSel');
+  sel.innerHTML = '<option value="">Pick incoming batter...</option>' +
+    batters.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  openModal('newBatterModal');
 }
 
 function submitNewBatter() {
   const batterId = document.getElementById('newBatterSel').value;
   if (!batterId) { toast('Select a batter', true); return; }
+
+  // Update engine crease state immediately (no server call needed)
   if (_newBatterPosition === 'non_striker') {
-    // Non-striker run-out replacement: stored in metadata on next ball
+    // Non-striker run-out replacement piggybacks onto next ball metadata so
+    // the server's _derive_batting_state can reproduce the swap.
     _pendingNonStrikerId = batterId;
-    matchState.currentNonStrikerId = batterId; // optimistic display
+    engine.seatBatter(batterId, 'non_striker');
+    matchState.currentNonStrikerId = batterId;
   } else {
     matchState.pendingBatterId = batterId;
-    matchState.currentStrikerId = batterId; // optimistic display
+    engine.seatBatter(batterId, 'striker');
+    matchState.currentStrikerId = batterId;
   }
+
+  // Update the player strip so the user sees the incoming batter right away
+  renderPlayerStrip(engine.getScorecard());
   closeModal('newBatterModal');
 }
 
@@ -1433,40 +2041,41 @@ function cancelNewBatter() {
 
 async function openNewBowlerModal(forOver) {
   matchState._forOver = forOver;
-  try {
-    const res = await api('GET',
-      `/matches/${matchState.matchId}/innings/${matchState.inningsId}/eligible_bowlers?for_over=${forOver}`);
-    const eligible = res.bowlers || [];
 
-    const listEl = document.getElementById('bowlerPickList');
-    listEl.innerHTML = '';
-    matchState._selectedBowlerId = null;
-
-    eligible.forEach(b => {
-      const canPlay = b.can_legal || b.can_throw;
-      const item = document.createElement('div');
-      const thrLabel = b.throw_overs_bowled > 0 ? ` 🤾 ${b.throw_overs_bowled}` : '';
-      const reason = !canPlay ? `<span class="bp-blocked">${b.reason_blocked || 'Ineligible'}</span>` : '';
-      item.innerHTML = `<button class="bowler-pick-btn" id="bpb-${b.id}"
-          onclick="selectEligibleBowler('${b.id}',this)" ${canPlay ? '' : 'disabled'}>
-        <span class="bp-name">${b.name}</span>
-        <span class="bp-info">${b.overs_bowled}ov${thrLabel}</span>
-        ${reason}
-      </button>`;
-      listEl.appendChild(item);
-    });
-
-    document.getElementById('newBowlerTitle').textContent = `Over ${forOver + 1} — Pick Bowler`;
-
-    // Default bowl type
-    matchState._newBowlType = 'legal';
-    document.getElementById('newBtLegal').classList.add('on');
-    document.getElementById('newBtThrow').classList.remove('on');
-
+  // Quick mode has no player roster — skip the modal entirely
+  if (!isTeamLinked) {
     openModal('newBowlerModal');
-  } catch(e) {
-    toast(e.message, true);
+    return;
   }
+
+  // Eligibility computed entirely client-side from the engine
+  const eligible = engine.getEligibleBowlers(matchState.bowlingTeamPlayers);
+
+  const listEl = document.getElementById('bowlerPickList');
+  listEl.innerHTML = '';
+  matchState._selectedBowlerId = null;
+
+  eligible.forEach(b => {
+    const canPlay = b.can_legal || b.can_throw;
+    const item = document.createElement('div');
+    const thrLabel = b.throw_overs_bowled > 0 ? ` 🤾 ${b.throw_overs_bowled}` : '';
+    const reason = !canPlay ? `<span class="bp-blocked">${b.reason_blocked || 'Ineligible'}</span>` : '';
+    item.innerHTML = `<button class="bowler-pick-btn" id="bpb-${b.id}"
+        onclick="selectEligibleBowler('${b.id}',this)" ${canPlay ? '' : 'disabled'}>
+      <span class="bp-name">${b.name}</span>
+      <span class="bp-info">${b.overs_bowled}ov${thrLabel}</span>
+      ${reason}
+    </button>`;
+    listEl.appendChild(item);
+  });
+
+  document.getElementById('newBowlerTitle').textContent = `Over ${forOver + 1} — Pick Bowler`;
+
+  matchState._newBowlType = 'legal';
+  document.getElementById('newBtLegal').classList.add('on');
+  document.getElementById('newBtThrow').classList.remove('on');
+
+  openModal('newBowlerModal');
 }
 
 function selectEligibleBowler(bowlerId, btn) {
@@ -1483,15 +2092,29 @@ function setNewBowlType(val) {
 
 async function submitNewBowler() {
   if (!matchState._selectedBowlerId) { toast('Select a bowler', true); return; }
+
+  const bowlerId = matchState._selectedBowlerId;
+  const bowlType = matchState._newBowlType || 'legal';
+  const overNum  = matchState._forOver != null ? matchState._forOver : ((engine.legalBalls / 6) | 0);
+
+  // Register in engine immediately so the next ball can use the bowler
+  engine.addOverAssignment(overNum, bowlerId, bowlType);
+  matchState.currentBowlerId = bowlerId;
+  closeModal('newBowlerModal');
+
+  // Re-render strip with new bowler in place
+  renderPlayerStrip(engine.getScorecard());
+
+  // Persist in background — failure shouldn't block scoring
+  const matchId = matchState.matchId;
+  const inningsId = matchState.inningsId;
   try {
-    await api('POST', `/matches/${matchState.matchId}/innings/${matchState.inningsId}/overs`, {
-      bowler_id: matchState._selectedBowlerId,
-      bowl_type: matchState._newBowlType || 'legal',
+    await api('POST', `/matches/${matchId}/innings/${inningsId}/overs`, {
+      bowler_id: bowlerId,
+      bowl_type: bowlType,
     });
-    matchState.currentBowlerId = matchState._selectedBowlerId;
-    closeModal('newBowlerModal');
   } catch(e) {
-    toast(e.message, true);
+    toast('Bowler sync failed: ' + e.message, true);
   }
 }
 

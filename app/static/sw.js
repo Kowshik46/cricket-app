@@ -1,4 +1,4 @@
-const CACHE = 'cricket-v2';
+const CACHE = 'cricket-v3';
 const SHELL = [
   '/',
   'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap',

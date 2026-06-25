@@ -34,6 +34,31 @@ body{
 /* ── views ──────────────────────────────────── */
 .view{display:none;padding:14px 14px 6px}
 .view.on{display:block}
+#viewScoring{position:relative}
+
+/* ── sync pill (header) ──────────────────────── */
+.sync-pill{
+  font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.5px;
+  color:var(--gold);background:rgba(244,200,66,.12);
+  border:1px solid rgba(244,200,66,.35);border-radius:999px;
+  padding:3px 10px;
+}
+
+/* ── hydration overlay ──────────────────────── */
+#hydrateOverlay{
+  position:absolute;inset:0;background:rgba(8,15,20,.94);
+  display:none;align-items:center;justify-content:center;
+  z-index:200;border-radius:12px;
+}
+.hydrate-box{text-align:center;color:var(--cream);padding:20px}
+.hydrate-spinner{
+  width:36px;height:36px;
+  border:3px solid rgba(255,255,255,.15);border-top-color:var(--gold);
+  border-radius:50%;animation:hydrate-spin .8s linear infinite;
+  margin:0 auto 12px;
+}
+.hydrate-box p{font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted);margin-bottom:14px}
+@keyframes hydrate-spin{to{transform:rotate(360deg)}}
 
 /* ── cards ───────────────────────────────────── */
 .card{background:rgba(255,255,255,.04);border:1px solid var(--cb);border-radius:16px;padding:16px 14px;margin-bottom:12px}

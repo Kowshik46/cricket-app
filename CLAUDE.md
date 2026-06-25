@@ -52,6 +52,12 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
 - Profile page — display name, email/password management, match history, player stats
 - Forgot password flow via Supabase email reset
 - Offline-capable PWA (installable on mobile)
+- **Client-side scoring engine** (`score.js`): a `GameEngine` class replicates the Python helpers in `matches.py` so the score updates instantly on tap. The server is now only used for persistence (`POST /ball`, `POST /overs`, `POST /undo`) and is no longer in the render path. A `BallQueue` serialises POSTs so the DB `ball_events` ordering is preserved even when the user scores faster than the network round-trip
+  - `hydrateEngine(matchId, inningsId)` fetches innings + rules + ball timeline + over assignments in parallel, then calls `engine.rebuild(...)` — used after creating an innings (and on resume in future)
+  - A full-cover hydration overlay (`#hydrateOverlay`) blocks scoring until rebuild succeeds; failure shows a Retry button — the user can never score against a blank engine
+  - A `#syncStatus` pill in the header shows `Syncing N…` while POSTs are pending
+  - Eligible-batters / eligible-bowlers modals are now driven by `engine.getEligibleBatters()` / `engine.getEligibleBowlers()` — no network calls
+  - Spectator (`/watch`) still derives state server-side from `ball_events`, so spectators may be 5–10s behind the scorer — acceptable for cricket
 
 ---
 
@@ -110,7 +116,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   │   └── watch.html              ← live spectator view (polls /api/watch/{code} every 5s)
 │   ├── static/
 │   │   ├── manifest.json           ← PWA manifest
-│   │   ├── sw.js                   ← service worker (cache version `cricket-v2`)
+│   │   ├── sw.js                   ← service worker (cache version `cricket-v3`)
 │   │   ├── css/                    ← extracted page styles (one file per template)
 │   │   │   ├── index.css
 │   │   │   ├── profile.css
@@ -513,7 +519,7 @@ boot — do not move the Jinja vars into the static `.js` files (Jinja isn't app
 
 To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA service worker
 (`app/static/sw.js`) pre-caches all six static files at install — bump `CACHE` (currently
-`cricket-v2`) whenever you add a new top-level static asset.
+`cricket-v3`) whenever you add a new top-level static asset.
 
 ### UI Structure
 | Section | ID | Description |
@@ -559,6 +565,27 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 |-------|------|-------------|
 | `cfg.playersPerSide` | integer | Set in `startMatch()` / `loadTeamLinkedSetup()`; used by "Play Again" to recreate the match |
 | `cfg.matchNum` | integer | Tracks match series number (starts at 1, increments on each "Play Again", reset on "New Match") |
+
+**score.js module-level `engine` / `ballQueue` (client-side scoring):**
+
+| Symbol | Type | Description |
+|--------|------|-------------|
+| `engine` | `GameEngine` instance | Holds the full innings state (`totalRuns`, `legalBalls`, `strikerId`, `nonStrikerId`, `bowlerId`, `_balls[]`, `_batterStats`, `_bowlerStats`, `overAssignments`, `dismissedIds`, `nextBallIsFreeHit`). Initialised by `engine.init(...)` or `engine.rebuild(...)` (from `hydrateEngine`). `applyBall(input)` is the hot path — runs synchronously per tap and returns `{ overJustDone, needsNewBatter, needsNewBowler, newBatterPosition, inningsEnded }` |
+| `ballQueue` | `BallQueue` instance | FIFO of pending `POST /ball` requests. Drains serially — ball N+1 waits for ball N's 200 OK so the DB `ball_events` ordering matches the tap order. `ballQueue.pendingCount` blocks Undo. `ballQueue.drain()` is awaited before `complete` so the scorecard endpoint sees every delivery |
+| `_hydrateArgs` | `[matchId, inningsId]` | Saved last-call args so `retryHydrate()` can re-run after a network-failure overlay |
+
+**score.js `GameEngine` key methods:**
+
+| Method | Description |
+|--------|-------------|
+| `init(inningsRow, rules, overs, maxWickets, battingPlayers, bowlingPlayers)` | Reset + seat opening pair from `inningsRow.opening_striker_id` / `opening_non_striker_id`; populate `_playerNames` from the player arrays |
+| `rebuild(storedBalls, overAssignments, inningsRow, rules, overs, maxWickets, battingPlayers, bowlingPlayers)` | Calls `init()` then replays each stored ball via `_applyStoredBall` to reach current state — used by `hydrateEngine` |
+| `applyBall(input)` | Apply a NEW tap. Mirrors `record_ball` in `matches.py`: computes `is_legal_ball`, `extras`, `scored_runs` from rules; appends to `_balls`; updates totals, stats, rotation, over-end swap, wicket clear |
+| `undo(overAssignments)` | Pop last ball, then `rebuild` from the remaining slice — guarantees correct rederivation of free-hit flag, dismissed set, etc. |
+| `addOverAssignment(over, bowlerId, type)` | Register a bowler pick from the new-bowler modal; updates per-bowler over counts and `bowlerId` |
+| `seatBatter(playerId, position)` | Set `strikerId` or `nonStrikerId` when the user picks from the new-batter modal |
+| `getScorecard()` | Returns the same shape as the server's `InningsScorecard` so `renderBoard()` / `renderPlayerStrip()` need no changes |
+| `getEligibleBatters(allBattingPlayers)` / `getEligibleBowlers(allBowlingPlayers)` | Pure functions over engine state; replace the `GET /eligible_batters` / `GET /eligible_bowlers` calls |
 
 **score.js specific (team-linked mode — set inside `matchState`):**
 
@@ -646,7 +673,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 5. `supaAuth.auth.updateUser({ password })` sets the new password; user is signed in automatically
 
 ### Service Worker
-- Cache name: `cricket-v2`
+- Cache name: `cricket-v3`
 - Shell cached on install: `/`, Google Fonts URL
 - Strategy: cache-first for shell/static, **network-first for `/api/`**
 
@@ -785,6 +812,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **Admin API calls**: only httpx DELETE for account deletion; all other auth admin ops are browser-side
 - **Scorekeeping is stateless**: score is always derived from `ball_events` timeline — never store a mutable score counter
 - **`_derive_batting_state()`** walks the ball timeline to compute current striker, non-striker, bowler, and over number; reads `metadata.run_out_end` to decide which end is vacated on a run-out, and `metadata.new_non_striker_id` to seat the replacement non-striker
+- **Client `GameEngine` mirrors `matches.py` helpers**: `_isLegal`, `_extrasFor`, `_runsFor`, `_updateBatterStats`, `_updateBowlerStats`, and the per-ball reduce loop must stay in lockstep with the Python equivalents. Any rule change in `matches.py` MUST be ported to the JS engine in the same PR, or hydration will produce a state that diverges from the next ball's POST response. Always run a quick end-to-end ball replay after touching either side.
+- **Server response from `POST /ball` is ignored**: the client renders from `engine.getScorecard()` immediately; the server response is consumed only as a 200 ack by `BallQueue`. Do not add code that reads the response body to update UI.
+- **Hydration is load-bearing**: never let the user score with a blank engine. `hydrateEngine` retries 3× with a 2s backoff, then leaves the `#hydrateOverlay` overlay visible with a Retry button. Do not add a "skip" path or hide the overlay on failure.
+- **Drain the BallQueue before innings boundaries**: `autoEndFirstInnings`, `finishMatch`, and any code that fetches the server scorecard MUST `await ballQueue.drain()` first so the server has every delivery.
 - **Rules are config-driven**: all scoring behaviour (wide runs, free hit, etc.) comes from `match_rules.rules_json`, never hardcoded in `matches.py`
 - **Score page is standalone**: `/score` works without a session (Quick Match); `session_id` is optional
 - **RULES_PRESETS** is defined in both `models.py` (backend) and `score.html` (frontend JS) — keep them in sync
