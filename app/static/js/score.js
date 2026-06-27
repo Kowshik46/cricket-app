@@ -537,6 +537,7 @@ let _watchCode = null;
 // modal pick state
 let _wideRuns = 0, _nbRuns = 0, _byeRuns = 1, _byeType = 'bye', _wicketType = null;
 let _runOutTarget = 'striker';      // 'striker' | 'non_striker'
+let _runOutRuns = 0;                // runs completed before run-out
 let _newBatterPosition = 'striker'; // which end the incoming batter fills
 let _pendingNonStrikerId = null;    // piggybacked onto next ball metadata after non-striker run-out
 let _openingPairSubmitting = false; // guard against double-tap on "Start Innings"
@@ -1300,9 +1301,31 @@ function submitBye() {
 }
 
 // ── Wicket ────────────────────────────────────────────────────
+function _getRunOutPlayerName(end) {
+  const id = end === 'striker' ? matchState.currentStrikerId : matchState.currentNonStrikerId;
+  return (id && engine._playerNames[String(id)]) || (end === 'striker' ? 'Striker' : 'Non-striker');
+}
+function _refreshRunOutButtons() {
+  const sName = _getRunOutPlayerName('striker');
+  const nsName = _getRunOutPlayerName('non_striker');
+  document.getElementById('roStrikerBtn').textContent = `🏃 ${sName}`;
+  document.getElementById('roNonStrikerBtn').textContent = `🏃 ${nsName}`;
+}
+function _renderRunOutRunBtns() {
+  const el = document.getElementById('runOutRunBtns');
+  if (!el) return;
+  el.innerHTML = [0,1,2,3].map(n =>
+    `<button class="pick-btn${_runOutRuns === n ? ' on' : ''}" onclick="setRunOutRuns(${n})">${n}</button>`
+  ).join('');
+}
+function setRunOutRuns(n) {
+  _runOutRuns = n;
+  _renderRunOutRunBtns();
+}
 function openWicketModal() {
   _wicketType = null;
   _runOutTarget = 'striker';
+  _runOutRuns = 0;
   const runOutRow = document.getElementById('runOutEndRow');
   if (runOutRow) runOutRow.style.display = 'none';
 
@@ -1319,6 +1342,8 @@ function openWicketModal() {
   // Free hit forces run-out; auto-show end picker in team-linked mode
   if (isFH && isTeamLinked && runOutRow) {
     runOutRow.style.display = '';
+    _refreshRunOutButtons();
+    _renderRunOutRunBtns();
     document.getElementById('roStrikerBtn').classList.add('on');
     document.getElementById('roNonStrikerBtn').classList.remove('on');
   }
@@ -1336,6 +1361,9 @@ function selectWicket(w) {
     runOutRow.style.display = show ? '' : 'none';
     if (show) {
       _runOutTarget = 'striker';
+      _runOutRuns = 0;
+      _refreshRunOutButtons();
+      _renderRunOutRunBtns();
       document.getElementById('roStrikerBtn').classList.add('on');
       document.getElementById('roNonStrikerBtn').classList.remove('on');
     }
@@ -1348,8 +1376,9 @@ function setRunOutTarget(val) {
 }
 function submitWicket() {
   if (!_wicketType) { toast('Select a dismissal type', true); return; }
-  const body = { event_type: 'wicket', runs: 0, wicket_type: _wicketType };
-  if (isTeamLinked && _wicketType === 'run_out') {
+  const isRunOut = _wicketType === 'run_out';
+  const body = { event_type: 'wicket', runs: isRunOut ? _runOutRuns : 0, wicket_type: _wicketType };
+  if (isTeamLinked && isRunOut) {
     body.metadata = { run_out_end: _runOutTarget };
     // For non-striker run-out, tag the correct dismissed player now
     if (_runOutTarget === 'non_striker' && matchState.currentNonStrikerId) {
@@ -1993,6 +2022,25 @@ async function submitOpeningPair() {
 
 // ── New Batter Modal ─────────────────────────────────────────
 
+function _renderNewBatterPosition() {
+  const posRow = document.getElementById('newBatterPositionRow');
+  const posText = document.getElementById('newBatterPositionText');
+  const otherEndEl = document.getElementById('newBatterOtherEnd');
+  if (!posRow || !isTeamLinked) return;
+
+  const isStriker = _newBatterPosition === 'striker';
+  posRow.style.display = '';
+  posText.textContent = isStriker ? '🏏 Striker end (faces next ball)' : '🤝 Non-striker end';
+
+  // Show who is at the other end
+  const otherId = isStriker ? matchState.currentNonStrikerId : matchState.currentStrikerId;
+  const otherName = (otherId && engine._playerNames[String(otherId)]) || null;
+  const otherLabel = isStriker ? 'Non-striker' : 'Striker';
+  otherEndEl.textContent = otherName
+    ? `${otherLabel}: ${otherName} stays at the other end`
+    : `${otherLabel} end is also vacant`;
+}
+
 async function openNewBatterModal(position = 'striker') {
   _newBatterPosition = position;
 
@@ -2001,12 +2049,19 @@ async function openNewBatterModal(position = 'striker') {
   const batters = engine.getEligibleBatters(matchState.battingTeamPlayers);
   if (!batters.length) return; // innings ended / last man
 
-  const titleEl = document.querySelector('#newBatterModal h2');
-  if (titleEl) titleEl.textContent = position === 'non_striker' ? 'New Non-Striker In' : 'New Batter In';
+  document.getElementById('newBatterTitle').textContent = position === 'non_striker' ? 'New Non-Striker In' : 'New Batter In';
+  _renderNewBatterPosition();
   const sel = document.getElementById('newBatterSel');
   sel.innerHTML = '<option value="">Pick incoming batter...</option>' +
     batters.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
   openModal('newBatterModal');
+}
+
+function swapNewBatterPosition() {
+  _newBatterPosition = _newBatterPosition === 'striker' ? 'non_striker' : 'striker';
+  document.getElementById('newBatterTitle').textContent =
+    _newBatterPosition === 'non_striker' ? 'New Non-Striker In' : 'New Batter In';
+  _renderNewBatterPosition();
 }
 
 function submitNewBatter() {

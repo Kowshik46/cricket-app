@@ -300,6 +300,8 @@
         <button class="btype-btn on" id="roStrikerBtn" onclick="setRunOutTarget('striker')">🏃 Striker</button>
         <button class="btype-btn" id="roNonStrikerBtn" onclick="setRunOutTarget('non_striker')">🏃 Non-striker</button>
       </div>
+      <label class="flabel" style="margin-top:10px">Runs completed before run-out</label>
+      <div class="pick-btns" id="runOutRunBtns"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('wicketModal')">Cancel</button>
@@ -392,7 +394,15 @@
 <!-- ── NEW BATTER MODAL ───────────── -->
 <div class="modal-bg" id="newBatterModal">
   <div class="modal">
-    <h2>New Batter In</h2>
+    <h2 id="newBatterTitle">New Batter In</h2>
+    <div id="newBatterPositionRow" style="display:none;margin-bottom:12px;padding:8px 10px;background:rgba(255,255,255,.06);border-radius:8px">
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:6px">Coming in at</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="newBatterPositionText" style="font-weight:600;font-size:.88rem;color:var(--cream)"></span>
+        <button class="btnout btnout-sm" style="padding:3px 10px;font-size:.7rem;margin-left:auto" onclick="swapNewBatterPosition()">🔄 Swap end</button>
+      </div>
+      <div id="newBatterOtherEnd" style="font-size:.72rem;color:var(--muted);margin-top:4px"></div>
+    </div>
     <label class="flabel">Incoming batter</label>
     <select class="finput finput-sm" id="newBatterSel" style="margin-bottom:14px"></select>
     <div class="modal-actions">
