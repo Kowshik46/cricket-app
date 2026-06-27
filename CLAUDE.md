@@ -27,14 +27,15 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
   - **Team-linked Match**: `/score?match_id=<id>&session=<sid>` — full player attribution
     - Opening Pair modal (striker, non-striker, opening bowler + bowl type)
     - Per-ball batter/bowler attribution; automatic striker rotation derived server-side
-    - New-Batter modal after wicket (eligible batters from server; dismissed batters excluded)
+    - New-Batter modal after wicket (eligible batters from `engine.getEligibleBatters()` — no network call); dismissed batters excluded
     - New-Bowler modal auto-triggers after each over completes — fires even when over ends on wicket
-    - Run-out dismissal prompts who was run out (Striker / Non-striker) and who is entering; non-striker run-out handled via `metadata.new_non_striker_id` piggybacked on next ball
+    - Run-out dismissal: buttons show actual player names (not generic "Striker"/"Non-striker"); 0–3 runs-completed picker; non-striker run-out handled via `metadata.new_non_striker_id` piggybacked on next ball
+    - New-Batter modal shows which end the incoming batter is filling, who stays at the other end, and a **🔄 Swap end** button to correct the assignment if needed
     - Live striker/non-striker/bowler strip below scoreboard
     - Bowling caps: max overs per bowler, max throw overs per team (configurable in Setup)
     - All bowling-team players eligible to bowl regardless of `can_bowl` flag (`can_bowl` is for team balancing only, not field enforcement)
     - Classic scorecard view: batting table (R/B/4s/6s/SR + dismissal), bowling table (O/R/W/Econ + throw-over tag)
-    - Entry from Toss step via "🏏 Score →" → `goToTeamScore()` creates match + redirects
+    - Entry from Toss step via "🏏 Score →" → `goToTeamScore()` creates match + redirects with `battingFirst` param derived from toss decision so the correct team bats in innings 1
   - Always two innings; innings break screen shows target
   - Configurable: overs, players/side, max wickets
   - Rule toggles: Wide +1 extra, No Ball +1 extra, No Ball → Free Hit
@@ -371,7 +372,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 |--------|------|------|-------------|
 | `POST` | `…/teams/generate` | `{team_a_name, team_b_name}` | Generate balanced teams (clears previous) |
 | `GET` | `…/teams` | — | Fetch last generated teams (persisted in DB) |
-| `PUT` | `…/teams` | `TeamManualEditRequest` | Replace team assignments with a manually specified split; preserves existing captain for each team if they remain on the same side |
+| `PUT` | `…/teams` | `TeamManualEditRequest` | Replace team assignments with a manually specified split; uses explicit `captain_a_id`/`captain_b_id` if provided, else preserves existing captain if still on same side, else picks randomly |
 | `POST` | `…/teams/add_player` | `{name, skill, can_bowl, team_name}` | Add a late player to a specific team without reshuffle |
 
 ### Toss — `/api/sessions/{id}/toss`
@@ -420,7 +421,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `GET` | `/api/matches/{id}/innings/{inn_id}/eligible_bowlers` | — | Returns **all** bowling-team players eligible for next over with cap/block flags — `can_bowl` is NOT a filter here |
 | `GET` | `/api/matches/{id}/innings/{inn_id}/eligible_batters` | — | Returns batting-team players not yet dismissed and not currently at the crease; handles both striker and non-striker vacancy after run-outs |
 
-> **Score page** — `/score` (GET) renders `score.html`. Accepts query params `session`, `name`, `teamA`, `teamB`, `overs` to pre-populate setup form.
+> **Score page** — `/score` (GET) renders `score.html`. Accepts query params `session`, `name`, `teamA`, `teamB`, `overs` to pre-populate setup form. Team-linked path also accepts `match_id` and `battingFirst` (team name that bats in innings 1, derived from toss decision).
 
 ### Watch (Spectator) — `/api/watch`
 | Method | Path | Auth | Description |
@@ -449,7 +450,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `TeamAssignmentOut` | response | `player_id, player_name, skill, can_bowl, bowl_type, team_name, is_captain` |
 | `TeamsOut` | response | `team_a_name, team_b_name, assignments[]` |
 | `TeamManualAssignment` | inner | `player_id, team_name` — one entry per player in `TeamManualEditRequest` |
-| `TeamManualEditRequest` | request | `team_a_name, team_b_name, assignments[TeamManualAssignment]` — body for `PUT …/teams` |
+| `TeamManualEditRequest` | request | `team_a_name, team_b_name, assignments[TeamManualAssignment], captain_a_id?, captain_b_id?` — body for `PUT …/teams`; explicit captain fields override preserve/random fallback |
 | `AddToTeamRequest` | request | `name, skill, can_bowl=False, bowl_type='legal', team_name` |
 | `TossResult` | response | `id, result, toss_number, session_id, winner_team?, elected_to?` |
 | `TossDecisionUpdate` | request | `winner_team, elected_to` |
@@ -549,18 +550,23 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | `_loadingSessionsLock` | boolean | Mutex preventing concurrent `loadSessions()` calls |
 | `lastTossId` | string\|null | UUID of the most recent toss — used by the decision panel to PATCH the result |
 | `tossWinner` | `'a'`\|`'b'`\|null | Which side the user selected as the toss winner; cleared on each new toss |
+| `_tossBattingTeam` | string\|null | Team name batting first — computed after toss decision saved; passed as `battingFirst` URL param in `goToTeamScore()`; reset in `confirmNewMatch()` |
 | `bowlType` | `'legal'`\|`'throw'` | Bowl type for the player being added in step 1 |
 | `lateBowlType` | `'legal'`\|`'throw'` | Bowl type for the late-player add panel in step 2 |
 | `_teEditPlayers` | array\|null | Working copy for the manual team editor modal: `[{player_id, player_name, skill, can_bowl, bowl_type, team:'a'\|'b'}]`; mutated by `toggleTeamEdit(id)`; reset each time `openTeamEditor()` is called |
+| `_teEditCapA` | string\|null | Player ID of the captain for team A in the editor; set from existing data on open, updated by `setTeamCap()` |
+| `_teEditCapB` | string\|null | Player ID of the captain for team B in the editor |
 
 **index.js team editor functions:**
 
 | Function | Description |
 |----------|-------------|
-| `openTeamEditor()` | Builds `_teEditPlayers` from current `teamsData.assignments`, renders the two-column chip grid, opens `#teamEditModal` |
-| `_renderTeamEditor()` | Re-renders the chip grid from `_teEditPlayers`; called after each `toggleTeamEdit` |
+| `openTeamEditor()` | Builds `_teEditPlayers` + seeds `_teEditCapA`/`_teEditCapB` from current `teamsData`, populates team name inputs, renders chip grid, opens `#teamEditModal` |
+| `_renderTeamEditor()` | Re-renders the chip grid from `_teEditPlayers`; auto-reassigns captain if it moved to the other team; called after each `toggleTeamEdit`/`setTeamCap` |
 | `toggleTeamEdit(playerId)` | Flips a player's `team` field (`'a'` ↔ `'b'`) and re-renders |
-| `saveTeamEdit()` | Calls `PUT /api/sessions/{id}/teams` with the new split; updates `teamsData` from response; re-renders team cards; shows toast |
+| `setTeamCap(side, playerId)` | Sets `_teEditCapA` or `_teEditCapB` to the chosen player and re-renders |
+| `saveTeamEdit()` | Reads team name inputs + captain IDs; calls `PUT /api/sessions/{id}/teams` with new names, split, and explicit captain IDs; updates `teamsData`; re-renders team cards |
+| `_applyAutoTeamNames(aBlank, bBlank)` | After generate/reshuffle, if a name input was blank, renames the team to `"Captain's team"` format via `PUT /teams` |
 
 **score.js `cfg` additions (scoring page):**
 
@@ -602,8 +608,9 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | `matchState.currentOverNumber` | integer | 0-indexed current over |
 | `matchState.pendingBatterId` | string\|null | Set after striker wicket modal; sent as `batter_id` on next ball |
 | `isTeamLinked` | boolean | `!!URLSearchParams.get('match_id')` — drives all team-linked branches |
-| `_runOutTarget` | `'striker'`\|`'non_striker'` | Which end was dismissed in a run-out; drives `submitWicket()` logic |
-| `_newBatterPosition` | `'striker'`\|`'non_striker'` | Which crease position the incoming batter fills after a wicket |
+| `_runOutTarget` | `'striker'`\|`'non_striker'` | Which end was dismissed in a run-out; buttons in wicket modal show actual player names via `_refreshRunOutButtons()` |
+| `_runOutRuns` | integer | Runs completed before the run-out (0–3); shown as a pick row when Run Out is selected; included in `body.runs` of the ball POST |
+| `_newBatterPosition` | `'striker'`\|`'non_striker'` | Which crease the incoming batter fills; shown in new-batter modal with other-end context; swappable via `swapNewBatterPosition()` |
 | `_pendingNonStrikerId` | string\|null | Replacement non-striker UUID after a non-striker run-out; piggybacked as `metadata.new_non_striker_id` on the very next ball |
 | `_openingPairSubmitting` | boolean | Guard flag preventing double-tap from submitting the Opening Pair modal twice (creates duplicate innings) |
 | `matchState._batTeamName` | string\|null | Name of team currently mapped to `battingTeamPlayers`; used by "Play Again" to decide whether to swap player arrays when changing which team bats first |
@@ -740,9 +747,9 @@ sessions where it is currently `NULL`, atomically assigning them to the new user
 [ ]12. Run supabase_watch_migration.sql (watch_code column on matches)
 [ ]13. Run supabase_match_name_migration.sql (name column on matches)
 [ ]14. Set SUPABASE_ANON_KEY in .env (if using auth)
-[ ]12. Add icon-192.png and icon-512.png to app/static/icons/
-[ ]13. Run server: uvicorn app.main:app --reload --port 8000
-[ ]14. Visit /score to verify scorekeeping UI loads
+[ ]15. Add icon-192.png and icon-512.png to app/static/icons/
+[ ]16. Run server: uvicorn app.main:app --reload --port 8000
+[ ]17. Visit /score to verify scorekeeping UI loads
 ```
 
 ---
@@ -796,6 +803,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | New bowler modal not triggered when over ends on a wicket | `else if (overJustDone...)` condition skipped when the preceding `if (wasWicket...)` also fired | Fixed: changed to two separate `if` blocks so both new-batter and new-bowler modals can fire on the same ball |
 | Non-striker incorrectly cleared on striker's wicket | `_derive_batting_state` always set `striker = None` on any wicket; didn't check `run_out_end` metadata | Fixed: reads `ball.metadata.run_out_end` and compares `dismissed_id` to determine which end to clear |
 | Play Again team arrays wrong after batting-team swap | `cfg.team1 = battingTeam` was set before the `if (battingTeam === cfg.team1)` check, so the check was always `true` | Fixed: save `prevTeam1 = cfg.team1` before the reassignment; use `prevTeam1` for the A/B player-array decision |
+| Team A always bats regardless of toss | `goToTeamScore()` never passed toss decision to score page; `loadTeamLinkedSetup()` hardcoded `team_a_name` as batting | Fixed: `selectTossElect()` stores `_tossBattingTeam`; `goToTeamScore()` passes it as `battingFirst` URL param; `loadTeamLinkedSetup()` reads it to assign batting/bowling players |
+| Team names show as "Team A" / "Team B" after generate | Name inputs left blank default to generic names with no captain context | Fixed: `_applyAutoTeamNames()` renames to `"Captain's team"` format after generate/reshuffle if inputs were blank |
 
 ---
 
@@ -829,6 +838,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **Play Again → Setup form**: `startPlayAgain` shows `viewSetup` (not scoring directly); for team-linked it pre-creates the match so `startMatch()` just patches rules; for quick mode it skips match creation (let `startMatch()` create it to avoid double-creation)
 - **Match name persistence**: `matches.name` stores the human-readable name; set at creation via `MatchCreate.name`; passed from `goToTeamScore()` / `startPlayAgain()` / `startMatch()`(quick mode); profile history shows it per game
 - **Profile history includes games**: `GET /api/profile/history` now returns `matches[]` per session with innings summaries (runs/wickets/overs) computed from `ball_events`; no full scorecard, just lightweight aggregates
+- **Auto team naming**: `makeTeams()` calls `_applyAutoTeamNames(aBlank, bBlank)` after generate — if an input was blank it does a follow-up `PUT /teams` to rename using `"Captain's team"` format. `reshuffle()` does the same when current names are still the original `"Team A"`/`"Team B"` defaults (captain may change on reshuffle)
+- **`battingFirst` URL param**: `goToTeamScore()` appends `battingFirst=<teamName>` only when a toss decision was recorded in the current session (`_tossBattingTeam !== null`). `loadTeamLinkedSetup()` validates it against the actual team names before trusting it — always falls back to team A if absent or unrecognised
+- **Run-out wicket modal**: player name buttons (`_refreshRunOutButtons`) must be called whenever the run-out row becomes visible (free-hit auto-show and manual `selectWicket('run_out')`). `_runOutRuns` resets to 0 on each new `openWicketModal()` call. Runs go in `body.runs` (batting runs, credited to striker or non-striker per normal scoring)
+- **New batter position**: `_newBatterPosition` is set by `openNewBatterModal(position)` and can be flipped by `swapNewBatterPosition()`. `submitNewBatter()` already branches on it — no extra change needed when user swaps
 
 ---
 
