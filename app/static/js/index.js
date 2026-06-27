@@ -755,8 +755,8 @@ async function _applyAutoTeamNames(aInputBlank, bInputBlank){
   var bName = teamsData.team_b_name;
   var capA = teamsData.assignments.find(function(a){ return a.team_name === aName && a.is_captain; });
   var capB = teamsData.assignments.find(function(a){ return a.team_name === bName && a.is_captain; });
-  var newA = aInputBlank && capA ? capA.player_name : aName;
-  var newB = bInputBlank && capB ? capB.player_name : bName;
+  var newA = aInputBlank && capA ? capA.player_name + "'s team" : aName;
+  var newB = bInputBlank && capB ? capB.player_name + "'s team" : bName;
   if(newA === newB) newB = newB + ' 2'; // prevent collision in unlikely same-name case
   if(newA === aName && newB === bName) return; // nothing to rename
   teamsData = await api('PUT', '/sessions/' + currentSessionId + '/teams', {
