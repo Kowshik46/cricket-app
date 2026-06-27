@@ -233,8 +233,9 @@
 <div class="modal-bg" id="generateModal">
   <div class="modal">
     <h2>Name Your Teams</h2>
-    <input class="finput finput-sm" type="text" id="teamAName" placeholder="Team A name" maxlength="40" autocomplete="off" style="margin-bottom:10px">
-    <input class="finput finput-sm" type="text" id="teamBName" placeholder="Team B name" maxlength="40" autocomplete="off">
+    <p style="font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);margin-top:-8px;margin-bottom:12px">Leave blank to auto-use the captain's name</p>
+    <input class="finput finput-sm" type="text" id="teamAName" placeholder="Auto (captain's name)" maxlength="40" autocomplete="off" style="margin-bottom:10px">
+    <input class="finput finput-sm" type="text" id="teamBName" placeholder="Auto (captain's name)" maxlength="40" autocomplete="off">
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('generateModal')">Cancel</button>
       <button class="btn-confirm" onclick="makeTeams()">Generate</button>
@@ -316,11 +317,15 @@
   </div>
 </div>
 
-<!-- FOLLOW MATCH MODAL -->
+<!-- TEAM EDIT MODAL -->
 <div class="modal-bg" id="teamEditModal">
   <div class="modal">
     <h2>✏️ Edit Teams</h2>
-    <p style="font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);margin-top:-8px;margin-bottom:12px">Tap a player to move them to the other team</p>
+    <p style="font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);margin-top:-8px;margin-bottom:12px">Tap a player to move them · 👑 to change captain</p>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <input class="finput finput-sm" type="text" id="teNameA" maxlength="40" autocomplete="off" style="flex:1">
+      <input class="finput finput-sm" type="text" id="teNameB" maxlength="40" autocomplete="off" style="flex:1">
+    </div>
     <div id="teamEditContent"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('teamEditModal')">Cancel</button>

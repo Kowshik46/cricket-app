@@ -229,9 +229,12 @@ h1 em{color:var(--gold);font-style:normal}
 /* ── team editor modal ─────────────────────── */
 .te-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:55vh;overflow-y:auto}
 .te-col-label{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
-.te-chip{display:block;width:100%;margin-bottom:6px;padding:8px 10px;border-radius:8px;border:1px solid var(--cb);background:rgba(253,246,227,.04);color:var(--cream);font-family:'DM Mono',monospace;font-size:.75rem;cursor:pointer;text-align:left;transition:background .15s}
+.te-chip-row{display:flex;align-items:center;gap:4px;margin-bottom:6px}
+.te-chip{flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--cb);background:rgba(253,246,227,.04);color:var(--cream);font-family:'DM Mono',monospace;font-size:.75rem;cursor:pointer;text-align:left;transition:background .15s}
 .te-chip:hover{background:rgba(253,246,227,.1)}
 .te-chip-arr{color:var(--muted);font-size:.7rem}
+.te-cap-btn{flex-shrink:0;padding:6px 7px;border-radius:7px;border:1px solid var(--cb);background:transparent;cursor:pointer;font-size:.8rem;opacity:.35;transition:all .15s}
+.te-cap-btn.on{opacity:1;background:rgba(244,200,66,.12);border-color:rgba(244,200,66,.5)}
 
 /* MODAL */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}

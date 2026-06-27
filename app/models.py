@@ -72,6 +72,8 @@ class TeamManualEditRequest(BaseModel):
     team_a_name: str = Field(..., max_length=40)
     team_b_name: str = Field(..., max_length=40)
     assignments: list[TeamManualAssignment]
+    captain_a_id: Optional[str] = None  # explicit captain for team A; falls back to preserve/random
+    captain_b_id: Optional[str] = None  # explicit captain for team B
 
 
 class AddToTeamRequest(BaseModel):

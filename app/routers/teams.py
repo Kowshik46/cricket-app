@@ -178,8 +178,13 @@ async def manual_edit_teams(session_id: str, body: TeamManualEditRequest):
 
     old_cap_a = existing_captains.get(body.team_a_name)
     old_cap_b = existing_captains.get(body.team_b_name)
-    cap_a = old_cap_a if old_cap_a in team_a_ids else random.choice(team_a_ids)
-    cap_b = old_cap_b if old_cap_b in team_b_ids else random.choice(team_b_ids)
+    # Use explicit captain if provided and valid, else preserve old one, else pick randomly
+    cap_a = body.captain_a_id if body.captain_a_id in team_a_ids else (
+        old_cap_a if old_cap_a in team_a_ids else random.choice(team_a_ids)
+    )
+    cap_b = body.captain_b_id if body.captain_b_id in team_b_ids else (
+        old_cap_b if old_cap_b in team_b_ids else random.choice(team_b_ids)
+    )
 
     players_res = (
         supabase_client.table("players")

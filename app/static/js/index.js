@@ -748,14 +748,37 @@ function openGenerateModal(){
   openModal('generateModal');
 }
 
+// If a team name was left blank, rename it to the captain's name after generate/reshuffle
+async function _applyAutoTeamNames(aInputBlank, bInputBlank){
+  if(!aInputBlank && !bInputBlank) return;
+  var aName = teamsData.team_a_name;
+  var bName = teamsData.team_b_name;
+  var capA = teamsData.assignments.find(function(a){ return a.team_name === aName && a.is_captain; });
+  var capB = teamsData.assignments.find(function(a){ return a.team_name === bName && a.is_captain; });
+  var newA = aInputBlank && capA ? capA.player_name : aName;
+  var newB = bInputBlank && capB ? capB.player_name : bName;
+  if(newA === newB) newB = newB + ' 2'; // prevent collision in unlikely same-name case
+  if(newA === aName && newB === bName) return; // nothing to rename
+  teamsData = await api('PUT', '/sessions/' + currentSessionId + '/teams', {
+    team_a_name: newA,
+    team_b_name: newB,
+    assignments: teamsData.assignments.map(function(a){
+      return { player_id: a.player_id, team_name: a.team_name === aName ? newA : newB };
+    }),
+  });
+}
+
 async function makeTeams(){
   if(!currentSessionId || players.length < 2) return;
-  var aName = document.getElementById('teamAName').value.trim() || 'Team A';
-  var bName = document.getElementById('teamBName').value.trim() || 'Team B';
+  var aInput = document.getElementById('teamAName').value.trim();
+  var bInput = document.getElementById('teamBName').value.trim();
+  var aName = aInput || 'Team A';
+  var bName = bInput || 'Team B';
   closeModal('generateModal');
   loading(true);
   try {
     teamsData = await api('POST', '/sessions/' + currentSessionId + '/teams/generate', { team_a_name: aName, team_b_name: bName });
+    await _applyAutoTeamNames(!aInput, !bInput);
     renderTeams();
     renderPlayers(); // refresh "View Teams" button visibility
     goTo(2);
@@ -772,7 +795,11 @@ async function reshuffle(){
   try {
     var aName = teamsData.team_a_name;
     var bName = teamsData.team_b_name;
+    // Detect if names are still generic defaults so we can re-auto-name after reshuffle
+    var aIsDefault = aName === 'Team A';
+    var bIsDefault = bName === 'Team B';
     teamsData = await api('POST', '/sessions/' + currentSessionId + '/teams/generate', { team_a_name: aName, team_b_name: bName });
+    await _applyAutoTeamNames(aIsDefault, bIsDefault);
     // Close add-player panel on reshuffle since teams change completely
     document.getElementById('addPlayerForm').classList.add('hidden');
     document.getElementById('addPlayerToggle').classList.remove('open');
@@ -841,6 +868,8 @@ function buildShareText(){
 // ── team editor (manual swap) ────────────────────────────────
 
 var _teEditPlayers = null; // [{player_id, player_name, skill, can_bowl, bowl_type, team:'a'|'b'}]
+var _teEditCapA = null;    // player_id of captain for team A
+var _teEditCapB = null;    // player_id of captain for team B
 
 function openTeamEditor(){
   if(!teamsData) return;
@@ -855,29 +884,47 @@ function openTeamEditor(){
       team: a.team_name === aName ? 'a' : 'b',
     };
   });
+  // Seed captains from current data
+  var capA = teamsData.assignments.find(function(a){ return a.team_name === aName && a.is_captain; });
+  var capB = teamsData.assignments.find(function(a){ return a.team_name !== aName && a.is_captain; });
+  _teEditCapA = capA ? capA.player_id : null;
+  _teEditCapB = capB ? capB.player_id : null;
+
+  document.getElementById('teNameA').value = teamsData.team_a_name;
+  document.getElementById('teNameB').value = teamsData.team_b_name;
   _renderTeamEditor();
   openModal('teamEditModal');
 }
 
 function _renderTeamEditor(){
   if(!teamsData || !_teEditPlayers) return;
-  var aName = teamsData.team_a_name;
-  var bName = teamsData.team_b_name;
   var aPlayers = _teEditPlayers.filter(function(p){ return p.team === 'a'; });
   var bPlayers = _teEditPlayers.filter(function(p){ return p.team === 'b'; });
 
+  // Auto-assign captain if current one moved to other team
+  if(!aPlayers.find(function(p){ return p.player_id === _teEditCapA; }) && aPlayers.length){
+    _teEditCapA = aPlayers[0].player_id;
+  }
+  if(!bPlayers.find(function(p){ return p.player_id === _teEditCapB; }) && bPlayers.length){
+    _teEditCapB = bPlayers[0].player_id;
+  }
+
   function col(players, side){
     return players.map(function(p){
-      return '<button class="te-chip" onclick="toggleTeamEdit(\'' + p.player_id + '\')">'
+      var isCap = side === 'a' ? p.player_id === _teEditCapA : p.player_id === _teEditCapB;
+      return '<div class="te-chip-row">'
+        + '<button class="te-chip" onclick="toggleTeamEdit(\'' + p.player_id + '\')">'
         + esc(p.player_name)
-        + ' <span class="te-chip-arr">' + (side === 'a' ? '→' : '←') + '</span></button>';
+        + ' <span class="te-chip-arr">' + (side === 'a' ? '→' : '←') + '</span></button>'
+        + '<button class="te-cap-btn' + (isCap ? ' on' : '') + '" title="Set as captain" onclick="setTeamCap(\'' + side + '\',\'' + p.player_id + '\')">👑</button>'
+        + '</div>';
     }).join('');
   }
 
   document.getElementById('teamEditContent').innerHTML =
     '<div class="te-cols">'
-    + '<div class="te-col"><div class="te-col-label">🟢 ' + esc(aName) + '</div>' + col(aPlayers, 'a') + '</div>'
-    + '<div class="te-col"><div class="te-col-label">🔴 ' + esc(bName) + '</div>' + col(bPlayers, 'b') + '</div>'
+    + '<div class="te-col"><div class="te-col-label">🟢</div>' + col(aPlayers, 'a') + '</div>'
+    + '<div class="te-col"><div class="te-col-label">🔴</div>' + col(bPlayers, 'b') + '</div>'
     + '</div>';
 }
 
@@ -886,10 +933,17 @@ function toggleTeamEdit(playerId){
   if(p){ p.team = p.team === 'a' ? 'b' : 'a'; _renderTeamEditor(); }
 }
 
+function setTeamCap(side, playerId){
+  if(side === 'a') _teEditCapA = playerId;
+  else _teEditCapB = playerId;
+  _renderTeamEditor();
+}
+
 async function saveTeamEdit(){
   if(!teamsData || !currentSessionId || !_teEditPlayers) return;
-  var aName = teamsData.team_a_name;
-  var bName = teamsData.team_b_name;
+  var aName = document.getElementById('teNameA').value.trim() || teamsData.team_a_name;
+  var bName = document.getElementById('teNameB').value.trim() || teamsData.team_b_name;
+  if(aName === bName){ toast('Team names must be different', true); return; }
   var assignments = _teEditPlayers.map(function(p){
     return { player_id: p.player_id, team_name: p.team === 'a' ? aName : bName };
   });
@@ -898,6 +952,8 @@ async function saveTeamEdit(){
       team_a_name: aName,
       team_b_name: bName,
       assignments: assignments,
+      captain_a_id: _teEditCapA || undefined,
+      captain_b_id: _teEditCapB || undefined,
     });
     closeModal('teamEditModal');
     renderTeams();
