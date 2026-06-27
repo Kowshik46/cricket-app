@@ -1896,23 +1896,29 @@ async function loadTeamLinkedSetup() {
 
     if (sessionId) {
       const teams = await api('GET', `/sessions/${sessionId}/teams`);
-      cfg.team1 = teams.team_a_name;
-      cfg.team2 = teams.team_b_name;
-      document.getElementById('team1Name').value = teams.team_a_name;
-      document.getElementById('team2Name').value = teams.team_b_name;
+      // Respect toss decision: battingFirst param tells us which team bats
+      const battingFirst = _urlParams.get('battingFirst');
+      const batName = (battingFirst && [teams.team_a_name, teams.team_b_name].includes(battingFirst))
+        ? battingFirst
+        : teams.team_a_name;
+      const bowName = batName === teams.team_a_name ? teams.team_b_name : teams.team_a_name;
+
+      cfg.team1 = batName;
+      cfg.team2 = bowName;
+      document.getElementById('team1Name').value = batName;
+      document.getElementById('team2Name').value = bowName;
       document.getElementById('team1Name').readOnly = true;
       document.getElementById('team2Name').readOnly = true;
       document.getElementById('team1Name').style.opacity = '.65';
       document.getElementById('team2Name').style.opacity = '.65';
 
-      const aName = teams.team_a_name;
       matchState.battingTeamPlayers = teams.assignments
-        .filter(a => a.team_name === aName)
+        .filter(a => a.team_name === batName)
         .map(a => ({ id: String(a.player_id), name: a.player_name, can_bowl: a.can_bowl, bowl_type: a.bowl_type || 'legal' }));
       matchState.bowlingTeamPlayers = teams.assignments
-        .filter(a => a.team_name !== aName)
+        .filter(a => a.team_name === bowName)
         .map(a => ({ id: String(a.player_id), name: a.player_name, can_bowl: a.can_bowl, bowl_type: a.bowl_type || 'legal' }));
-      matchState._batTeamName = aName;
+      matchState._batTeamName = batName;
     }
   } catch(e) {
     toast('Failed to load match data: ' + e.message, true);

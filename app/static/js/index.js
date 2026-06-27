@@ -20,6 +20,7 @@ var tossN = 0;
 var tossing = false;
 var lastTossId = null;
 var tossWinner = null;    // 'a' or 'b'
+var _tossBattingTeam = null; // team name that is batting first (set after toss decision)
 var currentUser = null;
 var canBowl = false;         // step-1 add-player toggle
 var bowlType = 'legal';      // step-1 bowl type ('legal' | 'throw')
@@ -1125,6 +1126,12 @@ async function selectTossElect(choice){
     var label = choice === 'bat' ? 'bat first' : 'field first';
     document.getElementById('tdresult').textContent = winnerName + ' elected to ' + label + ' ✓';
 
+    // Determine and store which team bats first
+    var nameA = (teamsData && teamsData.team_a_name) || 'Team A';
+    var nameB = (teamsData && teamsData.team_b_name) || 'Team B';
+    var loserName = winnerName === nameA ? nameB : nameA;
+    _tossBattingTeam = (choice === 'bat') ? winnerName : loserName;
+
     // Update the latest history row
     var hist = document.getElementById('thist');
     var latest = hist.querySelector('[data-toss-id="' + lastTossId + '"]');
@@ -1199,7 +1206,8 @@ async function goToTeamScore(){
     });
     var nameParam = sessionName ? encodeURIComponent(sessionName + ' - Match 1') : '';
     window.location.href = '/score?match_id=' + match.id + '&session=' + currentSessionId
-      + (nameParam ? '&name=' + nameParam : '');
+      + (nameParam ? '&name=' + nameParam : '')
+      + (_tossBattingTeam ? '&battingFirst=' + encodeURIComponent(_tossBattingTeam) : '');
   } catch(e) {
     toast(e.message || 'Failed to create match', true);
   }
@@ -1213,7 +1221,7 @@ function confirmNewMatch(){
   document.getElementById('confirmOk').textContent = 'Continue';
   document.getElementById('confirmOk').onclick = function(){
     closeModal('confirmModal');
-    tossN = 0; tossing = false; lastTossId = null; tossWinner = null;
+    tossN = 0; tossing = false; lastTossId = null; tossWinner = null; _tossBattingTeam = null;
     document.getElementById('thist').innerHTML = '';
     document.getElementById('tres').className = 'tres';
     document.getElementById('tsub').textContent = '';
