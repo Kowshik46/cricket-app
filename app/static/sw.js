@@ -1,4 +1,4 @@
-const CACHE = 'cricket-v3';
+const CACHE = 'cricket-v5';
 const SHELL = [
   '/',
   'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap',
@@ -8,6 +8,9 @@ const SHELL = [
   '/static/js/score.js',
   '/static/css/profile.css',
   '/static/js/profile.js',
+  '/static/css/ground.css',
+  '/static/js/ground.js',
+  '/static/js/track.js',
 ];
 
 self.addEventListener('install', function(e){
@@ -30,6 +33,8 @@ self.addEventListener('fetch', function(e){
   var url = new URL(e.request.url);
   // Always network-first for API calls
   if(url.pathname.startsWith('/api/')){ return; }
+  // Admin is a live control panel — never serve a stale copy
+  if(url.pathname === '/admin' || url.pathname.indexOf('/static/js/admin') === 0 || url.pathname.indexOf('/static/css/admin') === 0){ return; }
   // Cache-first for shell / static assets
   e.respondWith(
     caches.match(e.request).then(function(cached){

@@ -6,11 +6,15 @@ from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 import os
 
-from app.routers import sessions, players, teams, toss, auth, profile, matches, watch
+from app.routers import sessions, players, teams, toss, auth, profile, matches, watch, grounds, events, admin
 from app.database import supabase_client
+from app.security import admin_password
+from app import tracking
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+# Publishable key (sb_publishable_...) goes to the browser for Supabase Auth.
+# SUPABASE_ANON_KEY is the pre-rename name, still honoured so old deployments keep working.
+SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
 
 
 @asynccontextmanager
@@ -19,6 +23,8 @@ async def lifespan(app: FastAPI):
         supabase_client.table("sessions").select("id").limit(1).execute()
     except Exception as e:
         print(f"WARNING: Supabase connection check failed: {e}")
+    if len(admin_password()) < 8:
+        print("WARNING: ADMIN_PASSWORD is unset or shorter than 8 chars — /admin login is disabled or weak")
     yield
 
 
@@ -40,11 +46,25 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 app.include_router(matches.router, prefix="/api/matches", tags=["matches"])
 app.include_router(watch.router, prefix="/api/watch", tags=["watch"])
+app.include_router(grounds.router, prefix="/api/grounds", tags=["grounds"])
+app.include_router(events.router, prefix="/api/events", tags=["events"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(tracking.router, prefix="/api", tags=["tracking"])
 
 
 @app.get("/watch", response_class=HTMLResponse)
 async def watch_page(request: Request):
     return templates.TemplateResponse("watch.html", {"request": request})
+
+
+@app.get("/join", response_class=HTMLResponse)
+async def join_page(request: Request):
+    return templates.TemplateResponse("event.html", {"request": request})
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    return templates.TemplateResponse("admin.html", {"request": request})
 
 
 @app.get("/score", response_class=HTMLResponse)
@@ -54,7 +74,7 @@ async def score_page(request: Request):
         {
             "request": request,
             "supabase_url": SUPABASE_URL,
-            "supabase_anon_key": SUPABASE_ANON_KEY,
+            "supabase_publishable_key": SUPABASE_PUBLISHABLE_KEY,
         },
     )
 
@@ -66,7 +86,7 @@ async def profile_page(request: Request):
         {
             "request": request,
             "supabase_url": SUPABASE_URL,
-            "supabase_anon_key": SUPABASE_ANON_KEY,
+            "supabase_publishable_key": SUPABASE_PUBLISHABLE_KEY,
         },
     )
 
@@ -78,7 +98,7 @@ async def index(request: Request):
         {
             "request": request,
             "supabase_url": SUPABASE_URL,
-            "supabase_anon_key": SUPABASE_ANON_KEY,
+            "supabase_publishable_key": SUPABASE_PUBLISHABLE_KEY,
         },
     )
 

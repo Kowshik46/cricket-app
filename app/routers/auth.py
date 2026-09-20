@@ -44,6 +44,7 @@ async def claim_sessions(
         .update({"owner_id": str(user.id)})
         .in_("id", body.session_ids)
         .is_("owner_id", "null")
+        .is_("event_id", "null")  # day-event games belong to the organiser, not whoever signs in
         .execute()
     )
     return {"claimed": len(res.data) if res.data else 0}

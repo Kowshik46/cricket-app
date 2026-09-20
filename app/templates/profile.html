@@ -149,9 +149,10 @@
 <!-- Server-injected config (consumed by /static/js/profile.js) -->
 <script>
   window.SUPA_URL  = '{{ supabase_url }}';
-  window.SUPA_ANON = '{{ supabase_anon_key }}';
+  window.SUPA_PUBLISHABLE = '{{ supabase_publishable_key }}';
 </script>
 
+<script src="/static/js/track.js" defer></script>
 <script src="/static/js/profile.js" defer></script>
 </body>
 </html>

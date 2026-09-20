@@ -282,6 +282,7 @@ select.finput,select.finput-sm{
 @keyframes slideup{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
 .modal h2{font-family:'Playfair Display',serif;font-size:1.15rem;margin-bottom:14px}
 .modal-actions{display:flex;gap:8px;margin-top:16px}
+.btn-wa{flex:1;padding:13px;background:#25D366;border:none;color:#062b12;border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem;font-weight:600}
 .btn-cancel{flex:1;padding:13px;background:transparent;border:1px solid var(--cb);color:var(--muted);border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem}
 .btn-ok{flex:1;padding:13px;background:var(--gold);color:var(--sky);border:none;border-radius:10px;cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem;font-weight:700}
 .btn-ok.red{background:var(--red);color:#fff}

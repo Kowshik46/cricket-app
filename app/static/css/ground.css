@@ -1,0 +1,28 @@
+/* Ground picker (shared: admin, day lobby, score setup). Uses the page's tokens with fallbacks. */
+.gp { display: flex; flex-direction: column; gap: 8px; }
+.gp[hidden], .gp [hidden] { display: none !important; }
+.gp-select, .gp-name {
+  width: 100%; padding: 12px 14px; border-radius: 10px;
+  background: rgba(255,255,255,.05); border: 1px solid var(--cb, rgba(255,255,255,.09));
+  color: var(--cream, #fdf6e3); font: 16px 'DM Sans', sans-serif; outline: none;
+  color-scheme: dark;
+}
+.gp-select:focus, .gp-name:focus { border-color: var(--gold, #f4c842); }
+.gp-select option { background: #0e1c28; color: var(--cream, #fdf6e3); }
+.gp-map {
+  align-self: flex-start; font-family: 'DM Mono', monospace; font-size: .7rem;
+  color: var(--gold, #f4c842); text-decoration: none; letter-spacing: .3px;
+}
+.gp-new {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px;
+  border: 1px dashed var(--cb, rgba(255,255,255,.15)); background: rgba(255,255,255,.02);
+}
+.gp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gp-btn {
+  padding: 9px 14px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--cb, rgba(255,255,255,.15)); background: transparent;
+  color: var(--cream, #fdf6e3); font: 600 .78rem 'DM Sans', sans-serif;
+}
+.gp-btn:active { transform: scale(.97); }
+.gp-save { background: var(--gold, #f4c842); border-color: var(--gold, #f4c842); color: #1a1200; }
+.gp-coords { font-family: 'DM Mono', monospace; font-size: .68rem; color: var(--muted, rgba(253,246,227,.55)); }

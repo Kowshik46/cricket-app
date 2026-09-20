@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Literal, Optional, Any
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date
 
 
 class SessionCreate(BaseModel):
@@ -16,6 +16,8 @@ class SessionOut(BaseModel):
     id: UUID
     name: str
     created_at: datetime
+    event_id: Optional[UUID] = None
+    ground_id: Optional[UUID] = None
 
 
 class PlayerCreate(BaseModel):
@@ -245,6 +247,11 @@ class MatchCreate(BaseModel):
     rules_preset: Literal["standard", "box", "gully", "custom"] = "standard"
     rules: Optional[MatchRules] = None  # custom override
     name: Optional[str] = Field(default=None, max_length=100)
+    ground_id: Optional[str] = None  # falls back to the session's ground if omitted
+
+
+class MatchGroundUpdate(BaseModel):
+    ground_id: Optional[str] = None  # null clears the ground
 
 
 class MatchOut(BaseModel):
@@ -257,6 +264,7 @@ class MatchOut(BaseModel):
     rules_preset: str
     watch_code: Optional[str] = None
     name: Optional[str] = None
+    ground_id: Optional[UUID] = None
     created_at: datetime
 
 
@@ -381,3 +389,71 @@ class MatchScorecard(BaseModel):
 
 class UpdateMatchRulesRequest(BaseModel):
     rules: MatchRules
+
+
+# ── Grounds, day events, admin ────────────────────────────────────────────────
+
+class GroundCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    address: Optional[str] = Field(default=None, max_length=200)
+
+
+class GroundUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    address: Optional[str] = Field(default=None, max_length=200)
+
+
+class GroundOut(BaseModel):
+    id: UUID
+    name: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
+    created_at: datetime
+
+
+class AdminLogin(BaseModel):
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+class EventCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    organisation: Optional[str] = Field(default=None, max_length=80)
+    event_date: date
+    expires_at: datetime  # when the day code stops working (client sends end-of-day with tz offset)
+    ground_id: Optional[str] = None
+
+
+class EventUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    organisation: Optional[str] = Field(default=None, max_length=80)
+    expires_at: Optional[datetime] = None
+    status: Optional[Literal["active", "closed"]] = None
+    ground_id: Optional[str] = None
+
+
+class GameCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    ground_id: Optional[str] = None  # defaults to the event's ground
+
+
+class EventPlayerCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=30)
+    skill: Literal["beginner", "intermediate", "expert"]
+    can_bowl: bool = False
+    bowl_type: Literal["legal", "throw"] = "legal"
+
+
+class EventPlayerUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=30)
+    skill: Optional[Literal["beginner", "intermediate", "expert"]] = None
+    can_bowl: Optional[bool] = None
+    bowl_type: Optional[Literal["legal", "throw"]] = None
+
+
+class AddGamePlayers(BaseModel):
+    player_ids: list[UUID] = Field(..., min_length=1, max_length=60)

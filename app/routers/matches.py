@@ -12,7 +12,7 @@ from app.models import (
     MatchCreate, MatchOut, MatchRules, RULES_PRESETS,
     InningsCreate, InningsOut, InningsScorecard, MatchScorecard,
     BallEventCreate, BallEventOut, UpdateMatchRulesRequest,
-    OverAssignmentCreate, OverAssignmentOut,
+    OverAssignmentCreate, OverAssignmentOut, MatchGroundUpdate,
     BatterStats, BowlerStats,
 )
 
@@ -444,8 +444,14 @@ async def create_match(body: MatchCreate):
         "rules_preset": body.rules_preset,
         "watch_code": _gen_watch_code(),
     }
+    ground_id = body.ground_id
     if body.session_id:
         row["session_id"] = body.session_id
+        if not ground_id:  # inherit the game's ground (set when the organiser created it)
+            sess = supabase_client.table("sessions").select("ground_id").eq("id", body.session_id).execute()
+            ground_id = sess.data[0].get("ground_id") if sess.data else None
+    if ground_id:
+        row["ground_id"] = ground_id
     if body.name:
         row["name"] = body.name
 
@@ -460,6 +466,15 @@ async def create_match(body: MatchCreate):
     }).execute()
 
     return match
+
+
+@router.patch("/{match_id}/ground", response_model=MatchOut)
+async def set_match_ground(match_id: str, body: MatchGroundUpdate):
+    _get_match_or_404(match_id)
+    if body.ground_id and not supabase_client.table("grounds").select("id").eq("id", body.ground_id).execute().data:
+        raise HTTPException(422, "Ground not found")
+    res = supabase_client.table("matches").update({"ground_id": body.ground_id or None}).eq("id", match_id).execute()
+    return res.data[0]
 
 
 @router.get("", response_model=list[MatchOut])
@@ -676,6 +691,7 @@ async def get_scorecard(match_id: str):
         players_per_side=match["players_per_side"],
         rules_preset=match["rules_preset"],
         watch_code=match.get("watch_code"),
+        ground_id=match.get("ground_id"),
         created_at=match["created_at"],
     )
 

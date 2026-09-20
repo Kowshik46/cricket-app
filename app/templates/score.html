@@ -9,6 +9,7 @@
 <title>Cricket Scorekeeper</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/score.css">
+<link rel="stylesheet" href="/static/css/ground.css">
 </head>
 <body>
 <div class="wrap">
@@ -30,6 +31,11 @@
       <div class="fgroup">
         <label class="flabel">Match Name</label>
         <input class="finput" type="text" id="matchName" placeholder="Sunday Game" maxlength="60" autocomplete="off">
+      </div>
+
+      <div class="fgroup">
+        <label class="flabel">Ground <span style="text-transform:none;letter-spacing:0">(optional)</span></label>
+        <div id="groundPicker"></div>
       </div>
 
       <div class="row2 fgroup">
@@ -502,6 +508,7 @@
     </div>
     <div class="modal-actions" style="margin-top:14px">
       <button class="btn-cancel" onclick="closeModal('shareMatchModal')">Close</button>
+      <button class="btn-wa" onclick="shareMatchWhatsApp()">WhatsApp</button>
     </div>
   </div>
 </div>
@@ -510,6 +517,8 @@
 
 <!-- QRCode.js (davidshimjs) — used by the share modal -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/static/js/track.js" defer></script>
+<script src="/static/js/ground.js" defer></script>
 <script src="/static/js/score.js" defer></script>
 </body>
 </html>

@@ -107,16 +107,22 @@ Create `.env` in the project root:
 
 ```env
 SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_SECRET_KEY=eyJ...   # Legacy service_role JWT key
+SUPABASE_SECRET_KEY=sb_secret_...   # Secret key (server only)
 
 # Optional — enables sign in / sign up / profile page
-SUPABASE_ANON_KEY=eyJ...     # Legacy anon JWT key
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...   # Publishable key (safe for the browser)
+
+# Optional — enables the /admin page (day events, grounds, visitor stats)
+ADMIN_PASSWORD=...           # 12+ chars; on Render set it as a secret env var
+VISITOR_HASH_SALT=...        # salt for hashing visitor IPs (defaults to SUPABASE_SECRET_KEY)
 ```
 
 > **Where to get the keys:**
-> Supabase Dashboard → Project Settings → API Keys → **"Legacy anon, service_role API keys"** tab
-> - `SUPABASE_SECRET_KEY` = the **service_role** row
-> - `SUPABASE_ANON_KEY` = the **anon** row
+> Supabase Dashboard → Project Settings → API Keys → **"Publishable and secret API keys"** tab
+> - `SUPABASE_SECRET_KEY` = the **secret** key (`sb_secret_...`) — never expose it
+> - `SUPABASE_PUBLISHABLE_KEY` = the **publishable** key (`sb_publishable_...`)
+>
+> Full annotated list of every variable: [`app/.env.example`](app/.env.example)
 
 ### 3. Set up the database
 
@@ -279,7 +285,7 @@ If the number of bowlers is odd, one team gets one extra bowler (best-effort, no
 | Problem | Fix |
 |---------|-----|
 | App won't start — `ModuleNotFoundError` | Run `uvicorn` from the **project root**, not inside `app/` |
-| `SupabaseException: Invalid API key` | Use the **legacy JWT key** (`eyJ...`) from the "Legacy" tab in Supabase Dashboard |
+| `SupabaseException: Invalid API key` | Re-copy the `sb_secret_...` key from Project Settings → API Keys (check it is from the right project) |
 | Sessions disappear after creating them while logged in | Fixed — `POST /sessions` now stamps `owner_id` from the JWT so sessions appear in the authenticated user's list |
 | Teams gone after navigating back | Run `supabase_features_migration.sql` — adds the team name columns needed for DB restoration |
 | `can_bowl` column not found | Run `supabase_features_migration.sql` |

@@ -46,11 +46,14 @@ GitHub (Kowshik46/cricket-app)
 | Variable | Description |
 |----------|-------------|
 | `SUPABASE_URL` | Your Supabase project URL (`https://<id>.supabase.co`) |
-| `SUPABASE_SECRET_KEY` | Legacy service_role JWT — server only, never expose to browser |
-| `SUPABASE_ANON_KEY` | Legacy anon JWT — injected into HTML for browser Supabase JS SDK |
+| `SUPABASE_SECRET_KEY` | Secret key `sb_secret_...` — server only, never expose to browser |
+| `SUPABASE_PUBLISHABLE_KEY` | Publishable key `sb_publishable_...` — injected into HTML for browser Supabase JS SDK |
+| `ADMIN_PASSWORD` | Super-admin password for `/admin` (day events, grounds, visitor stats). Secret env var on Render |
+| `VISITOR_HASH_SALT` | Optional salt for hashing visitor IPs; defaults to `SUPABASE_SECRET_KEY` |
 
-> **Key format:** `supabase-py 2.4.6` only accepts legacy JWT-format keys (`eyJ...`).
-> Get them from: Supabase Dashboard → Project Settings → API Keys → **"Legacy"** tab.
+> **Key format:** the app uses Supabase's new `sb_secret_...` / `sb_publishable_...` keys (`supabase-py 2.31.0`).
+> Get them from: Supabase Dashboard → Project Settings → API Keys → **"Publishable and secret API keys"** tab.
+> See `app/.env.example` for every variable with notes.
 
 ---
 
@@ -65,7 +68,7 @@ GitHub (Kowshik46/cricket-app)
    - `app/supabase_features_migration.sql`
    - `app/supabase_profile_migration.sql`
 3. Then run: `ALTER TABLE user_profiles DISABLE ROW LEVEL SECURITY;`
-4. Go to **Project Settings → API Keys → Legacy** and copy the Project URL, anon key, and service_role key
+4. Go to **Project Settings → API Keys** and copy the Project URL, the publishable key and the secret key
 
 ### 2. Configure environment
 
@@ -73,8 +76,8 @@ Create `.env` at the project root (next to `app/`):
 
 ```
 SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_SECRET_KEY=eyJ...   ← legacy service_role key
-SUPABASE_ANON_KEY=eyJ...     ← legacy anon key
+SUPABASE_SECRET_KEY=sb_secret_...   ← secret key
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...   ← publishable key
 ```
 
 ### 3. Install & run

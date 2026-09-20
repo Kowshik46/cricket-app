@@ -503,7 +503,10 @@ const cfg = {               // set on startMatch()
   rules: { wide_extra: true, nb_extra: true, free_hit: true },
   team1: 'Team A',
   team2: 'Team B',
+  groundId: null,           // saved ground picked in Setup (optional)
+  _loadedGroundId: null,    // ground the match row already has — PATCH only when this changes
 };
+let groundPicker = null;
 
 let matchState = {
   matchId: null,
@@ -595,6 +598,13 @@ function openShareModal() {
   openModal('shareMatchModal');
 }
 
+function shareMatchWhatsApp() {
+  const url = document.getElementById('shareLinkInput').value;
+  const name = (document.getElementById('matchName').value || '').trim();
+  const text = '🏏 Follow ' + (name || 'our match') + ' live: ' + url + '\nWatch code: ' + _watchCode;
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+}
+
 function copyShareLink() {
   const url = document.getElementById('shareLinkInput').value;
   navigator.clipboard.writeText(url)
@@ -675,6 +685,10 @@ function buildRulesObject(extra = {}) {
   const syncEl = document.getElementById('syncStatus');
   if (syncEl) ballQueue.setSyncIndicator(syncEl);
 
+  groundPicker = GroundPicker.mount(document.getElementById('groundPicker'), {
+    onChange: id => { cfg.groundId = id || null; },
+  });
+
   if (isTeamLinked) {
     await loadTeamLinkedSetup();
   }
@@ -703,6 +717,10 @@ async function startMatch() {
     });
     try {
       await api('PATCH', `/matches/${matchState.matchId}/rules`, { rules });
+      if ((cfg.groundId || null) !== (cfg._loadedGroundId || null)) {
+        await api('PATCH', `/matches/${matchState.matchId}/ground`, { ground_id: cfg.groundId || null });
+        cfg._loadedGroundId = cfg.groundId || null;
+      }
     } catch(e) {
       toast(e.message, true); return;
     }
@@ -729,6 +747,7 @@ async function startMatch() {
       rules_preset: 'custom',
       rules,
       name: document.getElementById('matchName').value.trim() || null,
+      ground_id: cfg.groundId || null,
     });
     matchState.matchId = match.id;
     matchState.inningsNum = 1;
@@ -1766,7 +1785,9 @@ async function startPlayAgain(battingTeam) {
         rules_preset: 'custom',
         rules,
         name: matchName,
+        ground_id: cfg.groundId || null,
       });
+      cfg._loadedGroundId = cfg.groundId || null;
       matchState.matchId = match.id;
       _setWatchCode(match.watch_code);
 
@@ -1887,6 +1908,8 @@ async function loadTeamLinkedSetup() {
   try {
     const match = await api('GET', `/matches/${matchId}`);
     _setWatchCode(match.watch_code);
+    cfg.groundId = cfg._loadedGroundId = match.ground_id || null;
+    groundPicker.setValue(cfg.groundId);
     cfg.overs = match.overs;
     cfg.maxWickets = match.players_per_side - 1;
     cfg.playersPerSide = match.players_per_side;

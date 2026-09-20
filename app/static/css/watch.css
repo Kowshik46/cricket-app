@@ -326,3 +326,9 @@ body {
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.error { background: rgba(224,82,82,.85); }
+
+/* ── Ground line under the match title ─────────────────────────────── */
+.match-ground {
+  display: block; margin: -2px 0 8px; color: var(--gold); text-decoration: none;
+  font-family: 'DM Mono', monospace; font-size: .7rem; letter-spacing: .3px;
+}

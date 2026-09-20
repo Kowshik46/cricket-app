@@ -10,5 +10,9 @@ services:
         sync: false
       - key: SUPABASE_SECRET_KEY
         sync: false
-      - key: SUPABASE_ANON_KEY
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: VISITOR_HASH_SALT
         sync: false

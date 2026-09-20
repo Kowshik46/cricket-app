@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080f14">
+<title>Day Lobby · Cricket</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/event.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="page-header">
+    <a class="btn-back" href="/">← Home</a>
+    <div class="page-title">🏟 Day <em>Lobby</em></div>
+    <span style="min-width:64px"></span>
+  </div>
+
+  <!-- Code entry (no ?code= in URL) -->
+  <div class="card" id="entryCard" hidden>
+    <div class="ctitle">Join a day event</div>
+    <p class="hint">Enter the 6-character code your organiser shared. It works all day.</p>
+    <input class="finput code" id="codeInput" maxlength="8" placeholder="X7K3M2" autocomplete="off"
+           autocapitalize="characters" spellcheck="false">
+    <button class="btn btn-prim btn-block" style="margin-top:10px" id="joinBtn">Join →</button>
+  </div>
+
+  <!-- Error / ended -->
+  <div class="card" id="errorCard" hidden style="text-align:center">
+    <div style="font-size:2rem;margin-bottom:6px" id="errIcon">❌</div>
+    <div class="game-name" id="errTitle"></div>
+    <p class="hint" id="errMsg" style="margin-top:6px"></p>
+    <button class="btn" id="errRetry">Try another code</button>
+  </div>
+
+  <div id="lobby" hidden>
+    <div class="card">
+      <div class="ev-org" id="evOrg"></div>
+      <h1 class="ev-name" id="evName"></h1>
+      <div class="ev-meta">
+        <div id="evWhen"></div>
+        <div id="evGround"></div>
+      </div>
+      <div class="ev-code">
+        <div><div class="flabel" style="margin:0 0 2px">Day code</div><div class="code-chip" id="evCode"></div></div>
+        <button class="btn btn-sm" id="shareBtn">Share link</button>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab on" data-tab="players">Players<span class="n" id="cntPlayers"></span></button>
+      <button class="tab" data-tab="games">Games<span class="n" id="cntGames"></span></button>
+    </div>
+
+    <!-- Players -->
+    <section id="tabPlayers">
+      <div class="card">
+        <div class="ctitle">Add yourself</div>
+        <input class="finput" id="pName" maxlength="30" placeholder="Your name" autocomplete="off">
+        <label class="flabel">Skill level</label>
+        <div class="pills" id="pSkill">
+          <button class="pill beginner" data-skill="beginner">Beginner</button>
+          <button class="pill intermediate on" data-skill="intermediate">Intermediate</button>
+          <button class="pill expert" data-skill="expert">Expert</button>
+        </div>
+        <div class="toggle-row" id="pBowlRow"><span>I bowl too</span><span class="toggle"></span></div>
+        <div id="pTypeWrap" hidden>
+          <label class="flabel">Bowling style</label>
+          <div class="pills" id="pType">
+            <button class="pill on" data-type="legal" style="color:var(--cream)">Legal</button>
+            <button class="pill" data-type="throw">Throw</button>
+          </div>
+        </div>
+        <button class="btn btn-prim btn-block" style="margin-top:14px" id="addBtn">Add me to the list</button>
+      </div>
+
+      <div class="card">
+        <div class="ctitle">Everyone today</div>
+        <p class="hint" style="margin-bottom:6px">Tap a skill badge to change it.</p>
+        <div class="list" id="playerList"></div>
+      </div>
+    </section>
+
+    <!-- Games -->
+    <section id="tabGames" hidden>
+      <div id="gameList"></div>
+    </section>
+  </div>
+</div>
+
+<!-- Add pool players to a game -->
+<div class="modal-bg" id="pickModal">
+  <div class="modal">
+    <h2 id="pickTitle">Add players</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn btn-sm" id="pickAll">Select all</button>
+      <span class="hint" style="margin:0" id="pickInfo"></span>
+    </div>
+    <div id="pickList"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn grow" id="pickCancel">Cancel</button>
+      <button class="btn btn-prim grow" id="pickConfirm">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/track.js" defer></script>
+<script src="/static/js/event.js" defer></script>
+</body>
+</html>

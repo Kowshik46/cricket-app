@@ -35,6 +35,14 @@ h1 em{color:var(--gold);font-style:normal}
 .auth-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 .auth-label.signed-in{color:var(--cream)}
 
+/* DAY-EVENT BACK BAR */
+.event-bar{
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;
+  background:rgba(244,200,66,.08);border:1px solid rgba(244,200,66,.3);border-radius:12px;padding:8px 12px;
+}
+.event-bar a{color:var(--gold);text-decoration:none;font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.5px}
+.event-bar button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:.9rem;padding:2px 6px}
+
 /* SESSION BAR */
 .session-bar{
   display:flex;align-items:center;gap:8px;margin-bottom:14px;

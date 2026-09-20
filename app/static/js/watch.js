@@ -138,13 +138,23 @@ function pname(id) {
 // ═══════════════════════════════════════════════════════════════
 
 function renderAll(data) {
-  const { match_name, watch_code, scorecard } = data;
+  const { match_name, watch_code, scorecard, ground } = data;
   const match   = scorecard.match;
   const innings = scorecard.innings_list || [];
   const isComplete = match.status === 'completed';
 
   document.getElementById('wMatchName').textContent = match_name;
   document.getElementById('wCodeBadge').textContent = watch_code || '';
+
+  const groundEl = document.getElementById('wGround');
+  if (ground) {
+    groundEl.textContent = '📍 ' + ground.name + (ground.latitude != null ? ' ↗' : '');
+    if (ground.latitude != null) groundEl.href = `https://www.google.com/maps?q=${ground.latitude},${ground.longitude}`;
+    else groundEl.removeAttribute('href');
+    groundEl.style.display = '';
+  } else {
+    groundEl.style.display = 'none';
+  }
 
   renderStatusPill(match.status);
   renderResultCard(innings, match, isComplete);

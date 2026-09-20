@@ -45,7 +45,7 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
   - Mobile-first one-handed scoring UI at `/score`
 - **Live spectator mode** — sharable watch code + QR code so anyone can follow the score in real time
   - Every match gets a unique 6-char alphanumeric `watch_code` (e.g. `X7K3M2`) stored in the DB
-  - "📤 Share" button in the score page header opens a modal with the code, a copyable link, and a QR code
+  - "📤 Share" button in the score page header opens a modal with the code, a copyable link, a QR code, and a green **WhatsApp** button (`shareMatchWhatsApp()` → `wa.me` with the watch link + code)
   - **"Follow a Live Match"** button on the home page — styled as a prominent gold filled button (`.follow-btn`) with a pulsing red `.live-dot` indicator; opens `#followMatchModal` → enter code → `/watch?code=XXXXXX`
   - `/watch` page (`watch.html`) polls `GET /api/watch/{code}` every 5s while live; stops on completion
   - Spectator view: live score, current over balls, player-at-crease strip, batting/bowling scorecard tabs
@@ -53,6 +53,13 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
   - **Result card** (`#resultCard`) — shown when `match.status === 'completed'`: trophy + winning team + margin (`by N runs` / `by N wickets`); falls back to "Match Tied!" on equal totals
   - **Manual refresh button** (🔄 in header) — `manualRefresh()` in `watch.js` cancels the current poll, fetches immediately, then reschedules. Auto-poll continues to run every 5s in the background unless the match is complete (then it stops and the `lastUpdated` text says so)
   - QR code generated client-side via `qrcode.js` (cdnjs CDN); no extra backend dependency
+- **Super-admin page (`/admin`) + Day Events** — password-protected (`ADMIN_PASSWORD` env / Render secret)
+  - Admin creates an **event** for a day (name, organisation, date, ground) and gets a 6-char **day code** valid until `expires_at` (default end of that day; extendable, closable)
+  - Players enter the code ("🏟 Join a Day Event" on home, or `/join?code=XXXXXX`) → **Day Lobby** (`/join`): shared **player pool** for the day (anyone with the code adds themselves + skill/bowling; tap badges to edit) and **games**
+  - A **game** = an existing `sessions` row with `event_id` set; **each game can have many matches** (existing Play Again series). Admin creates games; in the lobby players copy pool players into a game ("＋ Add players"), then **Open game →** hands off to the normal app (`/?session=<id>&event=<CODE>`) for teams → toss → scoring
+  - Admin tabs: **Events** (create / extend / close / reopen / delete, manage games), **Grounds** (rename / delete), **Visitors** (page views, uniques, devices, browsers, OS, countries, referrers, recent visits)
+- **Grounds** — every match can carry a ground (name + optional GPS from the browser's "📍 Use my location"). Saved once in `grounds`, picked from a dropdown next time (shared `GroundPicker` in `ground.js`); shown as a Maps link on the lobby and spectator page. A match inherits its game's ground unless overridden in Setup
+- **Visitor log** — every page fires a beacon (`track.js` → `POST /api/visit`); stores a **salted hash of the IP** (never the raw IP), user agent (+ parsed device/browser/OS), language, country (CDN header if present), path and referrer host. No query strings, no cookies, no per-user IDs
 - Profile page — display name, email/password management, match history, player stats
 - Forgot password flow via Supabase email reset
 - Offline-capable PWA (installable on mobile)
@@ -80,7 +87,9 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
 | `render.yaml` | Render service config — runtime, health check path, env var declarations |
 
 ### Environment variables (set in Render dashboard, never committed)
-Same three vars as local `.env` — `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_ANON_KEY`.
+Same vars as local `.env` — `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_PUBLISHABLE_KEY`, plus
+`ADMIN_PASSWORD` (**secret** — enables `/admin`) and optionally `VISITOR_HASH_SALT`. All five are declared
+in `render.yaml` with `sync: false` (value entered in the dashboard, never committed).
 
 ### DNS
 `cricket.kowshik.co.in` is a CNAME record pointing to the Render-provided domain.
@@ -104,6 +113,8 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   ├── main.py                     ← FastAPI app, router registration, template context
 │   ├── database.py                 ← Supabase client (service_role key, bypasses RLS)
 │   ├── models.py                   ← ALL Pydantic schemas live here
+│   ├── security.py                 ← admin cookie token, rate limiter, client IP + IP hashing (stdlib only)
+│   ├── tracking.py                 ← visitor log: UA parsing + POST /api/visit
 │   ├── routers/
 │   │   ├── sessions.py             ← CRUD: match sessions (incl. rename)
 │   │   ├── players.py              ← CRUD: players per session (incl. can_bowl, edit)
@@ -112,25 +123,37 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   │   ├── auth.py                 ← JWT verify, /me, /claim
 │   │   ├── profile.py              ← history, stats, display name, delete account
 │   │   ├── matches.py              ← scorekeeping: matches, innings, ball events, undo, scorecard
-│   │   └── watch.py                ← public read-only spectator API (no auth required)
+│   │   ├── watch.py                ← public read-only spectator API (no auth required)
+│   │   ├── grounds.py              ← public: list + create-or-get saved grounds
+│   │   ├── events.py               ← public, day-code-gated: lobby, player pool, copy players into a game
+│   │   └── admin.py                ← super-admin (cookie auth): login, events, games, grounds, visitors
 │   ├── templates/
 │   │   ├── index.html              ← main SPA structure (HTML only — styles & JS in /static)
 │   │   ├── profile.html            ← profile page structure (HTML only — styles & JS in /static)
 │   │   ├── score.html              ← ball-by-ball scoring UI structure (HTML only — styles & JS in /static)
-│   │   └── watch.html              ← live spectator view (polls /api/watch/{code} every 5s)
+│   │   ├── watch.html              ← live spectator view (polls /api/watch/{code} every 5s)
+│   │   ├── event.html              ← Day Lobby at /join (code entry, player pool, games)
+│   │   └── admin.html              ← super-admin dashboard at /admin
 │   ├── static/
 │   │   ├── manifest.json           ← PWA manifest
-│   │   ├── sw.js                   ← service worker (cache version `cricket-v3`)
+│   │   ├── sw.js                   ← service worker (cache version `cricket-v5`)
 │   │   ├── css/                    ← extracted page styles (one file per template)
 │   │   │   ├── index.css
 │   │   │   ├── profile.css
 │   │   │   ├── score.css
-│   │   │   └── watch.css
+│   │   │   ├── watch.css
+│   │   │   ├── event.css           ← Day Lobby + shared base components (cards, pills, tabs, modal, toast) that admin.css builds on
+│   │   │   ├── admin.css
+│   │   │   └── ground.css          ← GroundPicker (shared: admin, score setup)
 │   │   ├── js/                     ← extracted page scripts (one file per template, no build step)
-│   │   │   ├── index.js            ← reads window.SUPA_URL/window.SUPA_ANON injected by index.html
-│   │   │   ├── profile.js          ← reads window.SUPA_URL/window.SUPA_ANON injected by profile.html
+│   │   │   ├── index.js            ← reads window.SUPA_URL/window.SUPA_PUBLISHABLE injected by index.html
+│   │   │   ├── profile.js          ← reads window.SUPA_URL/window.SUPA_PUBLISHABLE injected by profile.html
 │   │   │   ├── score.js
-│   │   │   └── watch.js            ← no Jinja/Supabase injection needed (public page)
+│   │   │   ├── watch.js            ← no Jinja/Supabase injection needed (public page)
+│   │   │   ├── event.js            ← Day Lobby (no Supabase SDK; the code is the credential)
+│   │   │   ├── admin.js            ← admin dashboard (cookie auth, no Supabase SDK)
+│   │   │   ├── ground.js           ← GroundPicker.mount(el, {value, onChange}) — saved grounds + "Use my location"
+│   │   │   └── track.js            ← page-view beacon → POST /api/visit
 │   │   └── icons/                  ← icon-192.png, icon-512.png (add manually)
 │   ├── supabase_schema.sql         ← initial table creation (run first)
 │   ├── supabase_auth_migration.sql ← adds owner_id + RLS policies (run second)
@@ -138,6 +161,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   ├── supabase_profile_migration.sql  ← creates user_profiles table (run fourth)
 │   ├── supabase_scoring_migration.sql  ← scorekeeping tables (run fifth)
 │   ├── supabase_toss_decision_migration.sql ← winner_team + elected_to columns (run sixth)
+│   ├── supabase_events_migration.sql   ← grounds, events, event_players, visits, ground/event links (run tenth)
 │   ├── cricket-teams.html          ← legacy standalone HTML tool (not served by FastAPI)
 │   ├── requirements.txt
 │   ├── .gitignore
@@ -152,7 +176,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | Layer      | Technology                   | Notes |
 |------------|------------------------------|-------|
 | Backend    | FastAPI 0.111 + Uvicorn 0.29 | Async, Jinja2 templates, StaticFiles |
-| Database   | Supabase (Postgres)          | `supabase-py 2.4.6` — requires legacy JWT keys |
+| Database   | Supabase (Postgres)          | `supabase-py 2.31.0` — accepts new `sb_secret_` / `sb_publishable_` keys (legacy JWT keys still work) |
 | Auth       | Supabase Auth                | Optional; browser-side JS SDK + backend JWT verify |
 | Frontend   | Vanilla JS SPA               | Single `index.html`, no build step, no framework |
 | PWA        | Web App Manifest + SW        | Installable, offline shell, network-first for `/api/` |
@@ -167,12 +191,17 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | Variable | Required | Where used | Description |
 |----------|----------|------------|-------------|
 | `SUPABASE_URL` | Yes | `database.py`, `main.py`, `profile.py` | Project URL (`https://<id>.supabase.co`) |
-| `SUPABASE_SECRET_KEY` | Yes | `database.py`, `profile.py` | Legacy service_role JWT (`eyJ...`) — server only, bypasses RLS |
-| `SUPABASE_ANON_KEY` | Auth only | `main.py` → template | Anon/publishable key — injected into HTML for browser Supabase JS SDK |
+| `SUPABASE_SECRET_KEY` | Yes | `database.py` | **Secret key `sb_secret_...`** — server only, bypasses RLS. `database.py` refuses to start if this is a publishable key or a legacy *anon* JWT (a mixup would otherwise silently return empty results via RLS). A legacy `service_role` JWT still works |
+| `SUPABASE_PUBLISHABLE_KEY` | Auth only | `main.py` → template | **Publishable key `sb_publishable_...`** — injected into HTML (`window.SUPA_PUBLISHABLE`) for the browser Supabase JS SDK. Safe to expose. Old name `SUPABASE_ANON_KEY` is still read as a fallback |
+| `ADMIN_PASSWORD` | For `/admin` | `security.py` | Super-admin password. Local: `.env`. Production: Render secret env var. **Unset ⇒ admin login returns 503** (never falls back to an empty password). Also the cookie-signing key source — changing it logs out all admin sessions |
+| `VISITOR_HASH_SALT` | Optional | `security.py` | Salt for the HMAC that hashes visitor IPs. Falls back to `SUPABASE_SECRET_KEY`. Changing it breaks unique-visitor continuity |
 
-> **CRITICAL — key format:** `supabase-py 2.4.6` only accepts JWT-format keys (`eyJ...`).
-> New `sb_secret_...` / `sb_publishable_...` format is **not supported**.
-> Get legacy keys: Supabase Dashboard → Project Settings → API Keys → **"Legacy"** tab.
+> **Key format:** the app uses Supabase's new API keys — `sb_secret_...` (server) and `sb_publishable_...` (browser).
+> Get them: Supabase Dashboard → Project Settings → API Keys → **"Publishable and secret API keys"** tab.
+> Requires `supabase-py >= 2.x` with new-key support (pinned `2.31.0`, verified: it sends the secret key as `apikey`
+> and `Authorization: Bearer <same key>`, and `auth.get_user(jwt)` still sends the *user's* JWT as Bearer).
+> Legacy JWT keys (`eyJ...`) continue to work, so you can migrate one environment at a time; once nothing uses them,
+> disable the legacy keys in the dashboard. **Secret key = `SUPABASE_SECRET_KEY` only — never in the browser.**
 
 ---
 
@@ -192,6 +221,11 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 7. `supabase_team_score_migration.sql` — adds `bowl_type` to `players`, opening pair columns to `innings`, creates `innings_overs` table
 8. `supabase_watch_migration.sql` — adds `watch_code` unique column to `matches`
 9. `supabase_match_name_migration.sql` — adds `name text` column to `matches`
+10. `supabase_events_migration.sql` — `grounds`, `events`, `event_players`, `visits` tables; `sessions.event_id`/`ground_id`; `matches.ground_id`
+
+> `supabase_master.sql` (fresh-project script) includes migration 10 as section 5. **Run migration 10 in Supabase
+> *before* deploying this code** — `SessionOut`/`MatchOut` select the new columns and `/api/visit`, `/api/events`
+> write to the new tables.
 
 ### Tables
 
@@ -202,6 +236,8 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `name` | `text` | max 60 chars, renameable via PATCH |
 | `owner_id` | `uuid` nullable | FK → `auth.users(id)` — null = anonymous |
 | `created_at` | `timestamptz` | server default |
+| `event_id` | `uuid` nullable | FK → `events(id)` ON DELETE SET NULL — set ⇒ this session is a **game** in a day event |
+| `ground_id` | `uuid` nullable | FK → `grounds(id)` ON DELETE SET NULL — default ground for the game's matches |
 
 #### `players`
 | Column | Type | Notes |
@@ -262,6 +298,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `rules_preset` | `text` | `'standard'`, `'box'`, `'gully'`, `'custom'` |
 | `watch_code` | `text` nullable UNIQUE | 6-char alphanumeric; generated on `POST /api/matches`; used by `/api/watch/{code}` |
 | `name` | `text` nullable | Human-readable match name (e.g. "Chase game - Match 2"); set at creation, shown in history |
+| `ground_id` | `uuid` nullable | FK → `grounds(id)` ON DELETE SET NULL — where it was played; inherited from the session at creation, overridable via `PATCH /matches/{id}/ground` |
 | `created_at` | `timestamptz` | |
 
 #### `match_rules`
@@ -327,6 +364,58 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `batting_stats` | `jsonb` | runs/balls/fours/sixes/strike_rate/status/dismissal |
 | `bowling_stats` | `jsonb` | overs/maidens/runs/wickets/economy |
 
+#### `grounds`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `name` | `text` | unique case-insensitively (`grounds_name_lower_idx` on `lower(name)`) |
+| `latitude` / `longitude` | `double precision` nullable | CHECK ±90 / ±180; both or neither |
+| `address` | `text` nullable | optional free text |
+| `created_at` | `timestamptz` | |
+
+#### `events`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `name` | `text` | |
+| `organisation` | `text` nullable | free text label |
+| `code` | `text` UNIQUE | 6 chars from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (no 0/O/1/I); the day code players enter |
+| `ground_id` | `uuid` nullable | FK → `grounds(id)` ON DELETE SET NULL; default ground for new games |
+| `event_date` | `date` | |
+| `expires_at` | `timestamptz` | code stops working after this (admin's browser sends end-of-day in its own timezone) |
+| `status` | `text` | CHECK `'active'` \| `'closed'`. **Live ⇔ `status='active'` AND `expires_at > now()`** (`is_live()` in `events.py`) |
+| `created_at` | `timestamptz` | |
+
+#### `event_players`
+The day's shared player pool. Copied (by value) into a game's `players` table when picked — later edits don't propagate.
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `event_id` | `uuid` FK | → `events(id)` ON DELETE CASCADE |
+| `name` | `text` | unique per event, case-insensitive (`event_players_name_idx`) |
+| `skill` | `text` | CHECK `beginner/intermediate/expert` |
+| `can_bowl` | `boolean` | default `false` |
+| `bowl_type` | `text` | CHECK `legal/throw`, default `legal` |
+| `created_at` | `timestamptz` | |
+
+#### `visits`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `ip_hash` | `text` | first 32 hex of HMAC-SHA256(salt, ip) — **raw IP is never stored** |
+| `user_agent` | `text` | truncated to 300 |
+| `device_type` / `browser` / `os` | `text` | parsed from UA in `tracking.py`; `device_type='bot'` rows are excluded from admin counts |
+| `language` | `text` | first `Accept-Language` entry |
+| `country` | `text` | 2-letter, from `CF-IPCountry` when a CDN provides it (else null) |
+| `path` | `text` | one of `/ /score /watch /profile /join` — never the query string |
+| `referrer` | `text` | host only; same-site referrers dropped |
+| `created_at` | `timestamptz` | index `visits_created_at_idx` |
+
+> **RLS on the four new event/visitor tables is ENABLED with NO policies** (deny-all for anon/authenticated;
+> `service_role` bypasses). This is deliberate and differs from the scorekeeping tables: the anon key ships to
+> every browser, so an open table would expose day codes and the visitor log via Supabase's REST API.
+> Only the backend may read/write these.
+
 > **RLS on scorekeeping tables:** All five new tables have RLS **disabled**. The backend
 > uses the `service_role` key which bypasses RLS anyway.
 
@@ -382,11 +471,55 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `PATCH` | `…/toss/{toss_id}` | `{winner_team, elected_to}` | Record which team won and whether they bat/field |
 | `GET` | `…/toss/history` | — | Last 20 tosses for session |
 
+### Grounds — `/api/grounds` (public)
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/grounds` | — | All saved grounds ordered by name |
+| `POST` | `/api/grounds` | `GroundCreate` | Create, or return the existing ground with the same name (case-insensitive); back-fills coordinates onto an existing ground that had none. Rate-limited (15/min/IP + 60/min global) |
+
+### Events (day lobby) — `/api/events/{code}` (public; the code is the credential)
+Code is case-insensitive. Unknown ⇒ `404` (guess-throttled: 20 misses/min/IP + 300/min global → `429`). Not live (closed or past `expires_at`) ⇒ `410`.
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/events/{code}` | — | `{event, players[], games[]}` — event (name, organisation, code, date, expires_at, live, ground), the player pool, and games each with `ground`, `player_names[]`, `matches[{id,name,status,overs,watch_code}]`. Lobby polls this every 15s |
+| `POST` | `…/players` | `EventPlayerCreate` | Add to the day's pool; `409` on duplicate name (case-insensitive) |
+| `PATCH` | `…/players/{player_id}` | `EventPlayerUpdate` | Edit skill / role / name |
+| `DELETE` | `…/players/{player_id}` | — | Remove from the pool |
+| `POST` | `…/games/{session_id}/players` | `AddGamePlayers` | Copy chosen pool players into that game's `players` (skips names already in the game). `404` if the session doesn't belong to this event. Returns `{added, skipped}` |
+
+> Trust model matches sessions: anyone holding the code can add/edit/remove pool players. There is no per-person identity.
+
+### Admin — `/api/admin` (super-admin; HttpOnly cookie)
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| `POST` | `/login` | `{password}` | Constant-time compare with `ADMIN_PASSWORD`; sets cookie `admin_session` (HMAC-signed `exp.sig`, 12h, `HttpOnly; SameSite=Strict; Path=/api/admin; Secure` on https). 5/min/IP + 20/min global. `503` if `ADMIN_PASSWORD` unset |
+| `POST` | `/logout` | — | Clears the cookie |
+| `GET` | `/me` | — | `{admin:true}` or `401` (used by the page to decide login vs dashboard) |
+| `GET` | `/events` | — | Latest 100 events + `live`, `players_count`, `games_count`, `ground` |
+| `POST` | `/events` | `EventCreate` | Create event + unique code; expiry must be in the future; returns the full payload |
+| `GET` | `/events/{id}` | — | Same payload as the public lobby (works for expired/closed events too) |
+| `PATCH` | `/events/{id}` | `EventUpdate` | Rename, extend `expires_at`, `status` closed/active, change/clear `ground_id`/`organisation` (explicit `null` clears) |
+| `DELETE` | `/events/{id}` | — | Deletes the event + its player pool. Games (sessions) and matches are **kept**, just unlinked |
+| `POST` | `/events/{id}/games` | `GameCreate` | Create a game = session with `event_id` + `ground_id` (defaults to the event's ground) |
+| `DELETE` | `/events/{id}/games/{session_id}` | — | Delete that game and (by cascade) its teams/tosses/matches |
+| `PATCH` | `/grounds/{id}` | `GroundUpdate` | Rename / re-locate; `409` on duplicate name |
+| `DELETE` | `/grounds/{id}` | — | Delete; referencing rows fall back to NULL |
+| `GET` | `/visitors?days=7&tz_offset=330` | — | Aggregated visit log (humans only; bots counted separately): `views, unique_visitors, bot_views, series[], paths/devices/browsers/os/countries/referrers[], recent[40]`. `tz_offset` = minutes east of UTC so days bucket in the admin's local time. Reads up to 10 000 rows |
+
+### Tracking — `/api`
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/visit` | `{path, referrer?}` | Page-view beacon from `track.js`. `204`. Ignores paths outside the allowlist. 60/min/IP + 600/min global. Insert runs in a thread — never blocks or breaks the page |
+
+> **Why a client beacon, not middleware:** the service worker serves HTML cache-first, so returning PWA users never hit the server for the page itself. A server-side hook would silently undercount them.
+>
+> **Client IP is best-effort.** `security.client_ip()` uses the first `X-Forwarded-For` entry, which a client can forge. Fine for analytics; that is why every rate limiter that guards something sensitive also has a global bucket.
+
 ### Auth — `/api/auth`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/api/auth/me` | Bearer JWT | Returns `{id, email}` |
-| `POST` | `/api/auth/claim` | Bearer JWT | Assigns anonymous session UUIDs to the logged-in user |
+| `POST` | `/api/auth/claim` | Bearer JWT | Assigns anonymous session UUIDs to the logged-in user. **Skips sessions with `event_id`** — day-event games belong to the organiser, not whoever signs in |
 
 ### Profile — `/api/profile`
 | Method | Path | Auth | Description |
@@ -402,10 +535,11 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 ### Matches (Scorekeeping) — `/api/matches`
 | Method | Path | Body | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/matches` | `MatchCreate` | Create a new match with rules |
+| `POST` | `/api/matches` | `MatchCreate` | Create a new match with rules. `ground_id` is taken from the body, else inherited from the session's `ground_id` |
 | `GET` | `/api/matches` | `?session_id=` | List matches (latest 50, optional filter by session) |
 | `GET` | `/api/matches/{id}` | — | Get match |
 | `DELETE` | `/api/matches/{id}` | — | Delete match + all innings/balls |
+| `PATCH` | `/api/matches/{id}/ground` | `MatchGroundUpdate` | Set / clear (`null`) the match's ground; `422` if the ground doesn't exist |
 | `GET` | `/api/matches/{id}/rules` | — | Get current rules JSON |
 | `PATCH` | `/api/matches/{id}/rules` | `UpdateMatchRulesRequest` | Update rules |
 | `POST` | `/api/matches/{id}/innings` | `InningsCreate` | Create innings 1 or 2 |
@@ -426,7 +560,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 ### Watch (Spectator) — `/api/watch`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/watch/{code}` | None | Public — returns `{ watch_code, match_name, scorecard: MatchScorecard }` for the given 6-char code |
+| `GET` | `/api/watch/{code}` | None | Public — returns `{ watch_code, match_name, ground: {name, latitude, longitude}\|null, player_names, scorecard: MatchScorecard }` for the given 6-char code |
 
 > **Watch page** — `/watch` (GET) renders `watch.html`. Accepts `?code=XXXXXX` query param; shows entry form if omitted. Polls `GET /api/watch/{code}` every 5s while live, stops when `status === 'completed'`. No auth or Supabase keys injected (fully public).
 
@@ -442,7 +576,7 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 |-------|-----------|--------|
 | `SessionCreate` | request | `name` |
 | `SessionRename` | request | `name` (required, min 1) |
-| `SessionOut` | response | `id, name, created_at` |
+| `SessionOut` | response | `id, name, created_at, event_id?, ground_id?` |
 | `PlayerCreate` | request | `name, skill, can_bowl=False, bowl_type='legal'` |
 | `PlayerUpdate` | request | `name?, skill?, can_bowl?, bowl_type?` (all optional, at least one required) |
 | `PlayerOut` | response | `id, session_id, name, skill, can_bowl, bowl_type, created_at` |
@@ -465,8 +599,18 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `UpdateEmailRequest` | request (unused — email change is browser-side) | `email` (min 3, max 120) |
 | `UpdatePasswordRequest` | request (unused — password change is browser-side) | `password` (min 6) |
 | `MatchRules` | config | `wide_runs, wide_counts_as_ball, wide_reball, no_ball_runs, no_ball_counts_as_ball, no_ball_reball, free_hit_enabled, free_hit_dismissals, wicket_types[], last_man_standing, retirement_runs, boundary_four, boundary_six, max_overs_per_bowler?, max_throw_overs_per_team?` |
-| `MatchCreate` | request | `session_id?, match_type, overs, players_per_side, rules_preset, rules?, name?` |
-| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, watch_code?, name?, created_at` |
+| `MatchCreate` | request | `session_id?, match_type, overs, players_per_side, rules_preset, rules?, name?, ground_id?` |
+| `MatchGroundUpdate` | request | `ground_id?` (null clears) |
+| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, watch_code?, name?, ground_id?, created_at` |
+| `GroundCreate` / `GroundUpdate` | request | `name, latitude?, longitude?, address?` (lat ±90, lng ±180; update fields all optional) |
+| `GroundOut` | response | `id, name, latitude?, longitude?, address?, created_at` |
+| `AdminLogin` | request | `password` |
+| `EventCreate` | request | `name, organisation?, event_date, expires_at, ground_id?` |
+| `EventUpdate` | request | `name?, organisation?, expires_at?, status?('active'\|'closed'), ground_id?` — uses `exclude_unset`, so explicit `null` clears `ground_id`/`organisation` |
+| `GameCreate` | request | `name, ground_id?` |
+| `EventPlayerCreate` / `EventPlayerUpdate` | request | same fields as `PlayerCreate` / `PlayerUpdate` |
+| `AddGamePlayers` | request | `player_ids: UUID[]` (1–60) |
+| `VisitBody` | request (in `tracking.py`) | `path, referrer?` |
 | `InningsSummaryItem` | inner | `innings_number, batting_team, bowling_team, runs, wickets, overs_str, status` — lightweight innings score for history |
 | `MatchSummaryItem` | inner | `id, name?, status, created_at, innings_list[InningsSummaryItem]` — match summary inside `MatchHistoryItem` |
 | `InningsCreate` | request | `batting_team, bowling_team, opening_striker_id?, opening_non_striker_id?` |
@@ -518,12 +662,14 @@ The same split applies to `profile.html` ↔ `profile.css`/`profile.js` and `sco
 
 **Jinja2 → JS handoff:** `index.html` and `profile.html` still need the server-rendered Supabase
 keys. Each template assigns them to globals in a tiny inline `<script>` block (`window.SUPA_URL` /
-`window.SUPA_ANON`) **before** loading the external JS. The external JS reads those globals at
+`window.SUPA_PUBLISHABLE`) **before** loading the external JS. The external JS reads those globals at
 boot — do not move the Jinja vars into the static `.js` files (Jinja isn't applied to static assets).
 
 To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA service worker
-(`app/static/sw.js`) pre-caches all six static files at install — bump `CACHE` (currently
-`cricket-v3`) whenever you add a new top-level static asset.
+(`app/static/sw.js`) pre-caches the main pages' static files at install (plus `ground.css/js`, `track.js`) —
+bump `CACHE` (currently `cricket-v5`) whenever you add a new top-level static asset **or change any cached
+JS/CSS** (cache-first ⇒ users keep the old file until the name changes). `/admin` and `admin.js/css` are
+exempted from caching so the control panel is never stale.
 
 ### UI Structure
 | Section | ID | Description |
@@ -646,11 +792,36 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 - Rendered in `#bestPerformers` / `#bpContent` inside the result card; hidden again when `startPlayAgain` or `resetToSetup` clears the result screen.
 - The result card has no "Start fresh new match" link — Play Again covers all restart options (same teams, random, manual, toss).
 
+### Day Lobby (`/join`, `event.html` + `event.css` + `event.js`)
+Code entry → lobby. State lives in the closure of `event.js` (`code`, `data`, `form`); no globals, no Supabase SDK.
+- **Players tab**: add-yourself form (name, skill pills, "I bowl too" toggle → bowling style), list of everyone today. Tapping a skill badge cycles beginner→intermediate→expert; tapping the role badge toggles Bat / Bat & Bowl (optimistic, PATCH, reload on error); ✕ removes
+- **Games tab**: per game — roster count, ground (Maps link when it has coordinates), its matches with a status pill and **👁 Watch** link, **＋ Add players** (modal listing the pool; players already in the game are checked + disabled; "Select all" acts on the rest) and **Open game →**
+- Polls `GET /api/events/{code}` every 15s (skipped while the tab is hidden or the picker is open); a `410`/`404` swaps to an "ended / not found" card
+- Remembers the last code in `localStorage.cricket_event_code`
+
+### Admin page (`/admin`, `admin.html` + `admin.css` + `admin.js`)
+Loads `event.css` first (shared components), then `ground.css`, then `admin.css`. On load calls `GET /api/admin/me`: 401 ⇒ login card, else dashboard. Any later 401 (expired cookie) drops back to login.
+- **Events**: new-event form (Date change resets "valid until" to 23:59 that day, local); event cards with Copy link / Share (Web Share API, clipboard fallback) / Close-Reopen / Delete; **Manage** expands a panel: valid-until editor (+1 h, End of day), games list (Open / ✕), new-game form with its own `GroundPicker`, and the day's players
+- **Grounds**: list with Rename (prompt) and ✕. Grounds are *created* via the picker, not here
+- **Visitors**: 1 / 7 / 30-day range; KPI tiles, per-day bars, top pages/devices/browsers/OS/countries/referrers, recent-visits table (visitor id = first 8 chars of the IP hash)
+- **All server-supplied strings are rendered through `esc()`** — user agents, referrers, player and ground names are attacker-controlled. Keep it that way when adding UI
+
+### GroundPicker (`ground.js` + `ground.css`)
+`var gp = GroundPicker.mount(el, {value, onChange})` → `{getValue(), setValue(id), reload()}` (`setValue` is silent — it does not fire `onChange`). Dropdown of saved grounds + "＋ Add new ground…" (name + optional **📍 Use my location** via `navigator.geolocation`, HTTPS/localhost only; a denied prompt still lets you save the name). Posts to `POST /api/grounds` (create-or-get) and selects the result. Shows an "Open in Maps ↗" link (`https://www.google.com/maps?q=lat,lng` — no API key) when the ground has coordinates.
+- Used in: admin (event + game), `score.html` Setup (`#groundPicker`)
+- **score.js**: `cfg.groundId` (current pick, via `onChange`) and `cfg._loadedGroundId` (what the match row already has). Quick mode sends `ground_id` in `POST /matches`; team-linked mode `PATCH`es `/matches/{id}/ground` in `startMatch()` only when the pick changed; `startPlayAgain` passes `cfg.groundId` so later matches keep the ground. `loadTeamLinkedSetup()` preselects the match's inherited ground
+
+### Home page additions (`index.html` / `index.js`)
+- **🏟 Join a Day Event** button under Follow a Live Match → `#joinEventModal` → `goToEvent()` → `/join?code=`; modal pre-fills the last code
+- **Lobby hand-off**: `_consumeLobbyDeepLink()` (top of `loadSessions()`) reads `?session=<id>&event=<CODE>`, stores `LS_KEY` + `LS_EVENT`, `_addGuestId(id)`, then strips the params with `history.replaceState`. Signed-in users only list sessions they own, so `loadSessions()` falls back to `GET /sessions/{last}` and unshifts it if it has an `event_id` (tracked in `_eventBySession`)
+- **`#eventBar`** ("← Day lobby ✕") shows only while the selected session has an `event_id` and `LS_EVENT` is set (`_renderEventBar()`, called from `selectSession` / `onSessionChange`); ✕ (`dismissEventBar()`) forgets the code
+
 ### Key localStorage
 | Key | Value |
 |-----|-------|
 | `cricket_last_session` | UUID of the last active session (restored on load) |
 | `cricket_sessions` | JSON array of all session UUIDs this browser has created — used to filter guest `GET /api/sessions` requests |
+| `cricket_event_code` | Last day-event code this browser joined — prefills the join modal, drives the "← Day lobby" bar |
 
 ### Navigation rules
 - `goTo(n)` switches between steps 1/2/3 — **does not reload data**
@@ -675,6 +846,13 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 8. Sign-up form includes optional display name field; saved immediately if Supabase auto-confirms the account
 9. Duplicate email on sign-up detected via empty `identities` array in sign-up response
 
+### Admin auth flow (separate from Supabase Auth)
+1. `POST /api/admin/login {password}` → `check_admin_password` (`hmac.compare_digest` against `ADMIN_PASSWORD`)
+2. Success ⇒ cookie `admin_session = "<exp>.<HMAC-SHA256(key, exp)>"`, key derived from the password ⇒ **changing `ADMIN_PASSWORD` invalidates every session**
+3. Every `/api/admin/*` route except login/logout depends on `require_admin` (verifies signature + expiry)
+4. `SameSite=Strict` + JSON-only bodies is the CSRF defence; cookie `Path=/api/admin` so it is never sent to other endpoints
+5. Empty/unset `ADMIN_PASSWORD` ⇒ login is `503` and `_token_valid` is always false — there is no "empty password" backdoor
+
 ### Forgot password flow
 1. "Forgot password?" link in sign-in tab → opens forgot-password modal
 2. `supaAuth.auth.resetPasswordForEmail(email, { redirectTo: origin + '/' })` → Supabase emails reset link
@@ -683,7 +861,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 5. `supaAuth.auth.updateUser({ password })` sets the new password; user is signed in automatically
 
 ### Service Worker
-- Cache name: `cricket-v3`
+- Cache name: `cricket-v5`
 - Shell cached on install: `/`, Google Fonts URL
 - Strategy: cache-first for shell/static, **network-first for `/api/`**
 
@@ -719,7 +897,7 @@ Uses `supaAuth.auth.getSession()` directly (not `onAuthStateChange`) to reliably
 Auth is opt-in. App works fully without it — all sessions are anonymous (no `owner_id`).
 
 ### Enable auth
-1. Set `SUPABASE_ANON_KEY` in `.env`
+1. Set `SUPABASE_PUBLISHABLE_KEY` in `.env`
 2. Run `supabase_auth_migration.sql` in Supabase SQL Editor
 3. Enable Email provider: Supabase Dashboard → Authentication → Providers → Email
 
@@ -746,10 +924,12 @@ sessions where it is currently `NULL`, atomically assigning them to the new user
 [ ]11. Run supabase_team_score_migration.sql (bowl_type on players, opening pair on innings, innings_overs table)
 [ ]12. Run supabase_watch_migration.sql (watch_code column on matches)
 [ ]13. Run supabase_match_name_migration.sql (name column on matches)
-[ ]14. Set SUPABASE_ANON_KEY in .env (if using auth)
-[ ]15. Add icon-192.png and icon-512.png to app/static/icons/
-[ ]16. Run server: uvicorn app.main:app --reload --port 8000
-[ ]17. Visit /score to verify scorekeeping UI loads
+[ ]14. Run supabase_events_migration.sql (grounds, events, event_players, visits — RLS enabled, no policies)
+[ ]15. Set SUPABASE_PUBLISHABLE_KEY in .env (if using auth)
+[ ]16. Set ADMIN_PASSWORD (and optionally VISITOR_HASH_SALT) in .env; on Render add them as env vars (secret)
+[ ]17. Add icon-192.png and icon-512.png to app/static/icons/
+[ ]18. Run server: uvicorn app.main:app --reload --port 8000
+[ ]19. Visit /score to verify scorekeeping UI loads, /admin to verify the admin login
 ```
 
 ---
@@ -777,17 +957,19 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | `ModuleNotFoundError: No module named 'app'` | Running uvicorn from inside `app/` | Run from project root |
-| `SupabaseException: Invalid API key` | New `sb_secret_...` key format used | Use legacy JWT from "Legacy" tab |
-| `KeyError: SUPABASE_URL` | `.env` in wrong place or missing | `.env` must be at project root |
+| `SupabaseException: Invalid API key` | Key mistyped/truncated, from a different project, or revoked | Re-copy the `sb_secret_...` key from Project Settings → API Keys |
+| App exits at startup: "SUPABASE_SECRET_KEY is a publishable key…" | Publishable (or legacy anon) key pasted into `SUPABASE_SECRET_KEY` | Use the `sb_secret_...` key there; the publishable one belongs in `SUPABASE_PUBLISHABLE_KEY` |
+| Every query returns empty / RLS errors after switching keys | Publishable key used server-side (RLS applies to it) | Same fix as above |
+| `KeyError: SUPABASE_URL` | `.env` missing, or in neither `app/.env` nor the project root | `database.py` loads `app/.env` first, else `<root>/.env` (explicit paths — bare `load_dotenv()` searches from the CWD inside uvicorn's `--reload` worker and missed `app/.env`) |
 | Teams 404 on load | `supabase_schema.sql` not run | Run schema in Supabase SQL Editor |
 | `can_bowl` column missing | `supabase_features_migration.sql` not run | Run features migration |
-| Auth chip not showing | `SUPABASE_ANON_KEY` missing/placeholder | Set real anon key in `.env` |
+| Auth chip not showing | `SUPABASE_PUBLISHABLE_KEY` missing/placeholder (values starting `your-` are treated as unset) | Set the real `sb_publishable_...` key in `.env` |
 | 401 on sign-in | `supabase_auth_migration.sql` not run | Run auth migration |
 | Sessions missing after login | RLS blocking (migration not run) | Run auth migration |
 | PWA install prompt missing | No icons at `app/static/icons/` | Add `icon-192.png`, `icon-512.png` |
 | Display name save: RLS violation | `user_profiles` table has RLS enabled | Run `ALTER TABLE user_profiles DISABLE ROW LEVEL SECURITY;` |
 | Display name save: "cannot insert into view" | Old `user_profiles` view artifact exists | Run `DROP VIEW IF EXISTS user_profiles CASCADE; DROP TABLE IF EXISTS user_profiles CASCADE;` then recreate |
-| Delete account 403 | Supabase admin API blocked | Check service_role key is the legacy JWT format |
+| Delete account 403 | Supabase admin API rejected the call | Check `SUPABASE_SECRET_KEY` is the `sb_secret_...` key (a publishable key can't call the admin API) |
 | Over counter advances on wide/no-ball | `_is_legal()` in `matches.py` was inverted — `not rules.get("wide_counts_as_ball", False)` returned `True` for wides | Fixed: use `bool(rules.get(...))`. Existing DB rows are unaffected; start a new match to get correct `is_legal_ball` values |
 | Green pill artifact above bottom bar | `backdrop-filter:blur` on `.bottom-bar` let the last toggle row bleed through the semi-transparent background | Fixed: `.bottom-bar` now uses solid `#080f14` background, no backdrop-filter |
 | Multiple bottom bars stack on top of each other | `position:fixed` children escape their parent's `display:none`, so all view bottom-bars were visible simultaneously | Fixed: all `.bottom-bar` divs moved outside `.view` containers; `showView()` hides all bars then shows `#bar-{viewId}` |
@@ -804,6 +986,14 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | Non-striker incorrectly cleared on striker's wicket | `_derive_batting_state` always set `striker = None` on any wicket; didn't check `run_out_end` metadata | Fixed: reads `ball.metadata.run_out_end` and compares `dismissed_id` to determine which end to clear |
 | Play Again team arrays wrong after batting-team swap | `cfg.team1 = battingTeam` was set before the `if (battingTeam === cfg.team1)` check, so the check was always `true` | Fixed: save `prevTeam1 = cfg.team1` before the reassignment; use `prevTeam1` for the A/B player-array decision |
 | Team A always bats regardless of toss | `goToTeamScore()` never passed toss decision to score page; `loadTeamLinkedSetup()` hardcoded `team_a_name` as batting | Fixed: `selectTossElect()` stores `_tossBattingTeam`; `goToTeamScore()` passes it as `battingFirst` URL param; `loadTeamLinkedSetup()` reads it to assign batting/bowling players |
+| `/admin` login says "Admin is not configured" (503) | `ADMIN_PASSWORD` env var missing | Set it in `.env` locally / Render dashboard in prod, restart |
+| Admin logged out unexpectedly | `ADMIN_PASSWORD` was changed (cookie key derives from it) or 12h token expired | Log in again |
+| Admin login `429` | 5 attempts/min/IP or 20/min global exceeded | Wait a minute |
+| `relation "events" does not exist` / `column sessions.event_id does not exist` | `supabase_events_migration.sql` not run | Run migration 10 **before** deploying |
+| Day code says "This event has ended" | Past `expires_at` or admin closed it | Admin → Manage → extend (+1 h / End of day) or Reopen |
+| "Use my location" does nothing | Browser blocks geolocation (needs HTTPS or localhost; user may have denied) | Allow location for the site, or just save the ground by name |
+| Visitors tab empty | Beacon blocked / `visits` table missing / `/api/visit` throttled | Check migration 10 ran; server logs show `visit log failed:` on insert errors |
+| Visit counts look low | Bots excluded; ad-blockers may block the beacon; no-JS users aren't counted | Expected — analytics are approximate |
 | Team names show as "Team A" / "Team B" after generate | Name inputs left blank default to generic names with no captain context | Fixed: `_applyAutoTeamNames()` renames to `"Captain's team"` format after generate/reshuffle if inputs were blank |
 
 ---
@@ -821,7 +1011,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **Bowling split is best-effort**: odd number of bowlers gives one team one extra — not rejected
 - **`can_bowl` is a balancing hint, not a field rule**: it only affects team generation; during a match ALL players in the bowling team are eligible to bowl
 - **Email/password changes**: always browser-side via Supabase JS SDK — never add backend endpoints for these
-- **Admin API calls**: only httpx DELETE for account deletion; all other auth admin ops are browser-side
+- **Admin API calls**: only account deletion, via `supabase_client.auth.admin.delete_user()` (no hand-built key headers, no direct httpx); all other auth admin ops are browser-side
+- **New tables holding sensitive data get RLS enabled with no policies** (see `events`/`visits`). Only the scorekeeping tables are RLS-off, and that is legacy — do not copy it
+- **Anything rendered from user/visitor input goes through `esc()`** in the new pages (`admin.js`, `event.js`, `ground.js`); use `textContent` where possible
+- **Rate limits on public write endpoints need a global bucket too** (`X-Forwarded-For` is forgeable) — see `login`, `_load_live_event`, `record_visit`, `create_ground`
+- **Never store the raw IP** — always `hash_ip()`. Never log query strings on `visits`
+- **Event = day, game = session, match = match**: a game is just a `sessions` row with `event_id`; everything downstream (teams, toss, scoring, Play Again) is unchanged. Don't add event-specific branches to the scoring code
 - **Scorekeeping is stateless**: score is always derived from `ball_events` timeline — never store a mutable score counter
 - **`_derive_batting_state()`** walks the ball timeline to compute current striker, non-striker, bowler, and over number; reads `metadata.run_out_end` to decide which end is vacated on a run-out, and `metadata.new_non_striker_id` to seat the replacement non-striker
 - **Client `GameEngine` mirrors `matches.py` helpers**: `_isLegal`, `_extrasFor`, `_runsFor`, `_updateBatterStats`, `_updateBowlerStats`, and the per-ball reduce loop must stay in lockstep with the Python equivalents. Any rule change in `matches.py` MUST be ported to the JS engine in the same PR, or hydration will produce a state that diverges from the next ball's POST response. Always run a quick end-to-end ball replay after touching either side.
@@ -850,11 +1045,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
-supabase==2.4.6
+supabase==2.31.0
 python-dotenv==1.0.1
 jinja2==3.1.4
 aiofiles==23.2.1
 httpx>=0.27.0
 ```
 
-> Do not upgrade `supabase` beyond `2.4.6` without confirming new-format key (`sb_secret_...`) support.
+> `supabase` 2.31.0 was chosen because it accepts `sb_secret_` / `sb_publishable_` keys; it resolves cleanly with the other pins on Python 3.11 (`postgrest`, `supabase-auth`, `realtime` etc. move in lockstep with it). If you bump it, re-check that `SUPABASE_SECRET_KEY=sb_secret_…` still creates a client and that `auth.get_user` / `auth.admin.delete_user` still work.

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#080f14">
+<title>Admin · Cricket</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- event.css is the shared base component layer; admin.css adds admin-only bits -->
+<link rel="stylesheet" href="/static/css/event.css">
+<link rel="stylesheet" href="/static/css/ground.css">
+<link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+<div class="wrap wide">
+
+  <div class="page-header">
+    <a class="btn-back" href="/">← App</a>
+    <div class="page-title">🛡 <em>Admin</em></div>
+    <button class="btn btn-sm" id="logoutBtn" hidden>Log out</button>
+    <span id="hdrSpacer" style="min-width:64px"></span>
+  </div>
+
+  <!-- Login -->
+  <div class="card" id="loginCard" hidden>
+    <div class="ctitle">Super admin</div>
+    <input class="finput" type="password" id="pw" placeholder="Admin password" autocomplete="current-password">
+    <div class="err" id="loginErr" hidden></div>
+    <button class="btn btn-prim btn-block" style="margin-top:10px" id="loginBtn">Sign in</button>
+  </div>
+
+  <div id="app" hidden>
+    <div class="tabs">
+      <button class="tab on" data-tab="events">Events</button>
+      <button class="tab" data-tab="grounds">Grounds</button>
+      <button class="tab" data-tab="visitors">Visitors</button>
+    </div>
+
+    <!-- Events -->
+    <section id="tabEvents">
+      <div class="card">
+        <div class="ctitle">New day event</div>
+        <label class="flabel">Event name</label>
+        <input class="finput" id="evName" maxlength="80" placeholder="Sunday Smash" autocomplete="off">
+        <label class="flabel">Organisation (optional)</label>
+        <input class="finput" id="evOrg" maxlength="80" placeholder="Club / company / group" autocomplete="off">
+        <div class="two">
+          <div>
+            <label class="flabel">Date</label>
+            <input class="finput" type="date" id="evDate">
+          </div>
+          <div>
+            <label class="flabel">Code valid until</label>
+            <input class="finput" type="datetime-local" id="evUntil">
+          </div>
+        </div>
+        <label class="flabel">Ground</label>
+        <div id="evGround"></div>
+        <button class="btn btn-prim btn-block" style="margin-top:14px" id="createEventBtn">Create event &amp; get code</button>
+      </div>
+      <div id="eventList"></div>
+    </section>
+
+    <!-- Grounds -->
+    <section id="tabGrounds" hidden>
+      <div class="card">
+        <div class="ctitle">Saved grounds</div>
+        <p class="hint">Grounds are added when you set up an event or a match, then reused. Rename or remove them here — matches that used a removed ground just lose the label.</p>
+        <div class="list" id="groundList"></div>
+      </div>
+    </section>
+
+    <!-- Visitors -->
+    <section id="tabVisitors" hidden>
+      <div class="row" style="margin-top:14px">
+        <div class="pills" id="rangePills" style="flex:1">
+          <button class="pill" data-days="1">Today</button>
+          <button class="pill on" data-days="7">7 days</button>
+          <button class="pill" data-days="30">30 days</button>
+        </div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div class="card"><div class="ctitle">Views per day</div><div id="series"></div></div>
+      <div class="card"><div class="ctitle">Pages</div><div id="topPaths"></div></div>
+      <div class="card"><div class="ctitle">Devices</div><div id="topDevices"></div></div>
+      <div class="card"><div class="ctitle">Browsers</div><div id="topBrowsers"></div></div>
+      <div class="card"><div class="ctitle">Operating systems</div><div id="topOs"></div></div>
+      <div class="card"><div class="ctitle">Countries</div><div id="topCountries"></div></div>
+      <div class="card"><div class="ctitle">Referrers</div><div id="topReferrers"></div></div>
+      <div class="card">
+        <div class="ctitle">Recent visits</div>
+        <div class="scroll-x"><table class="tbl" id="recent"></table></div>
+        <p class="hint" style="margin:10px 0 0">IP addresses are stored only as a salted hash — the visitor id below is the first 8 characters. Same id = same network. Bots are excluded from the counts.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/ground.js" defer></script>
+<script src="/static/js/admin.js" defer></script>
+</body>
+</html>

@@ -1,12 +1,12 @@
 // ─── Supabase Auth client (browser-side) ─────────────────────────────────────
 var SUPA_URL  = window.SUPA_URL || '';
-var SUPA_ANON = window.SUPA_ANON || '';
+var SUPA_PUBLISHABLE = window.SUPA_PUBLISHABLE || '';
 var supaAuth  = null;
-if(SUPA_URL && SUPA_ANON && !SUPA_ANON.startsWith('your-')) {
+if(SUPA_URL && SUPA_PUBLISHABLE && !SUPA_PUBLISHABLE.startsWith('your-')) {
   try {
     // UMD bundle exposes supabase.createClient
     var _sb = window.supabase || (window.supabase_js);
-    supaAuth = _sb.createClient(SUPA_URL, SUPA_ANON);
+    supaAuth = _sb.createClient(SUPA_URL, SUPA_PUBLISHABLE);
   } catch(e) {
     console.warn('Supabase client init failed:', e);
   }
@@ -30,6 +30,8 @@ var lateTeamPick = 'a';      // which team the late player goes to
 
 var LS_KEY = 'cricket_last_session';
 var LS_SESSIONS = 'cricket_sessions';
+var LS_EVENT = 'cricket_event_code';
+var _eventBySession = {}; // session id → event id (null for ordinary sessions)
 
 function _getGuestIds(){
   try {
@@ -85,7 +87,7 @@ initAuth();
 // ─── Auth Init ────────────────────────────────────────────────────────────────
 async function initAuth(){
   if(!supaAuth){
-    // Anon key not configured — chip stays visible but clicking shows setup hint
+    // Publishable key not configured — chip stays visible but clicking shows setup hint
     updateAuthChip();
     await loadSessions();
     return;
@@ -182,7 +184,7 @@ function onAuthChipClick(){
     }
     menu.style.display = menu.style.display === 'none' ? '' : 'none';
   } else if(!supaAuth){
-    toast('Set SUPABASE_ANON_KEY in .env to enable sign-in', true);
+    toast('Set SUPABASE_PUBLISHABLE_KEY in .env to enable sign-in', true);
   } else {
     openAuthModal();
   }
@@ -407,6 +409,7 @@ async function loadSessions(){
   _loadingSessionsLock = true;
   loading(true);
   try {
+    _consumeLobbyDeepLink();
     var token = await getAccessToken();
     var sessionsPath = '/sessions';
     if(!token){
@@ -417,12 +420,27 @@ async function loadSessions(){
     var sel = document.getElementById('sessionSelect');
     sel.innerHTML = '<option value="">— select or create a match —</option>';
     sessions.forEach(function(s){
+      _eventBySession[s.id] = s.event_id || null;
       var opt = document.createElement('option');
       opt.value = s.id;
       opt.textContent = s.name + '  (' + fmtDate(s.created_at) + ')';
       sel.appendChild(opt);
     });
     var last = localStorage.getItem(LS_KEY);
+    if(last && !sessions.find(function(s){ return s.id === last; })){
+      // Signed-in users only list sessions they own; a day-event game opened from the lobby isn't theirs
+      try {
+        var evSession = await api('GET', '/sessions/' + last);
+        if(evSession.event_id){
+          _eventBySession[evSession.id] = evSession.event_id;
+          sessions.unshift(evSession);
+          var opt0 = document.createElement('option');
+          opt0.value = evSession.id;
+          opt0.textContent = evSession.name + '  (' + fmtDate(evSession.created_at) + ')';
+          sel.insertBefore(opt0, sel.options[1] || null);
+        }
+      } catch(e){ /* deleted or unreachable — fall through to "no session" */ }
+    }
     if(last && sessions.find(function(s){ return s.id === last; })){
       sel.value = last;
       await selectSession(last);
@@ -435,6 +453,34 @@ async function loadSessions(){
     _loadingSessionsLock = false;
     loading(false);
   }
+}
+
+// Lobby → app hand-off: /?session=<id>&event=<CODE> selects that game and remembers the way back.
+function _consumeLobbyDeepLink(){
+  var params = new URLSearchParams(location.search);
+  var sid = params.get('session');
+  var ev = params.get('event');
+  if(ev) localStorage.setItem(LS_EVENT, ev.toUpperCase());
+  if(sid){
+    localStorage.setItem(LS_KEY, sid);
+    _addGuestId(sid);
+  }
+  if(sid || ev) history.replaceState(null, '', location.pathname);
+}
+
+// Only shown while the selected game belongs to a day event
+function _renderEventBar(){
+  var code = localStorage.getItem(LS_EVENT);
+  var bar = document.getElementById('eventBar');
+  if(!bar) return;
+  var show = !!(code && currentSessionId && _eventBySession[currentSessionId]);
+  bar.style.display = show ? '' : 'none';
+  if(show) document.getElementById('eventBarLink').href = '/join?code=' + encodeURIComponent(code);
+}
+
+function dismissEventBar(){
+  localStorage.removeItem(LS_EVENT);
+  _renderEventBar();
 }
 
 async function createSession(){
@@ -465,7 +511,7 @@ async function createSession(){
 
 function onSessionChange(){
   var id = document.getElementById('sessionSelect').value;
-  if(!id){ currentSessionId = null; players = []; teamsData = null; renderPlayers(); document.getElementById('deleteSessionBtn').style.display = 'none'; document.getElementById('renameSessionBtn').style.display = 'none'; return; }
+  if(!id){ currentSessionId = null; _renderEventBar(); players = []; teamsData = null; renderPlayers(); document.getElementById('deleteSessionBtn').style.display = 'none'; document.getElementById('renameSessionBtn').style.display = 'none'; return; }
   selectSession(id);
 }
 
@@ -486,6 +532,7 @@ async function selectSession(id){
       teamsData = null; // 404 = no teams yet, that's fine
     }
     renderPlayers();
+    _renderEventBar();
     goTo(1);
   } catch(e){
     toast('Failed to load session: ' + e.message, true);
@@ -1378,6 +1425,19 @@ function goToWatch() {
   var code = (document.getElementById('followMatchCode').value || '').trim().toUpperCase();
   if (code.length < 4) { toast('Enter the match code first'); return; }
   window.location.href = '/watch?code=' + encodeURIComponent(code);
+}
+
+// ─── Join a Day Event ─────────────────────────────────────────────────────────
+function openJoinEventModal() {
+  document.getElementById('joinEventCode').value = localStorage.getItem(LS_EVENT) || '';
+  openModal('joinEventModal');
+  setTimeout(function(){ document.getElementById('joinEventCode').focus(); }, 120);
+}
+
+function goToEvent() {
+  var code = (document.getElementById('joinEventCode').value || '').trim().toUpperCase();
+  if (code.length < 4) { toast('Enter the day code first'); return; }
+  window.location.href = '/join?code=' + encodeURIComponent(code);
 }
 
 // ─── Service Worker ───────────────────────────────────────────────────────────

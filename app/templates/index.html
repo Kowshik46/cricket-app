@@ -35,6 +35,12 @@
     </div>
   </header>
 
+  <!-- Back to the day lobby (shown when arriving from an event game) -->
+  <div class="event-bar" id="eventBar" style="display:none">
+    <a id="eventBarLink" href="/join">← Day lobby</a>
+    <button onclick="dismissEventBar()" aria-label="Dismiss">✕</button>
+  </div>
+
   <!-- SESSION BAR -->
   <div class="session-bar">
     <select id="sessionSelect" onchange="onSessionChange()">
@@ -103,6 +109,9 @@
       </div>
       <div style="margin-top:8px">
         <button class="btnout follow-btn" onclick="openFollowMatchModal()" style="width:100%"><span class="live-dot"></span>Follow a Live Match</button>
+      </div>
+      <div style="margin-top:8px">
+        <button class="btnout" onclick="openJoinEventModal()" style="width:100%">🏟 Join a Day Event</button>
       </div>
     </div>
   </div>
@@ -349,6 +358,21 @@
   </div>
 </div>
 
+<div class="modal-bg" id="joinEventModal">
+  <div class="modal">
+    <h2>🏟 Join a Day Event</h2>
+    <p style="color:var(--muted);font-size:.82rem;margin-top:-4px;margin-bottom:14px;line-height:1.5">Enter the code from your organiser. It works all day — add yourself, then pick your game.</p>
+    <input class="finput finput-sm" type="text" id="joinEventCode" placeholder="e.g. K7M2QX"
+           maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false"
+           oninput="this.value=this.value.toUpperCase()"
+           onkeydown="if(event.key==='Enter')goToEvent()">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('joinEventModal')">Cancel</button>
+      <button class="btn-confirm" onclick="goToEvent()">Join →</button>
+    </div>
+  </div>
+</div>
+
 <!-- LOADING OVERLAY -->
 <div class="loading-overlay" id="loader"><div class="spinner"></div></div>
 <div class="toast" id="toast"></div>
@@ -359,9 +383,10 @@
 <!-- Server-injected config (consumed by /static/js/index.js) -->
 <script>
   window.SUPA_URL  = '{{ supabase_url }}';
-  window.SUPA_ANON = '{{ supabase_anon_key }}';
+  window.SUPA_PUBLISHABLE = '{{ supabase_publishable_key }}';
 </script>
 
+<script src="/static/js/track.js" defer></script>
 <script src="/static/js/index.js" defer></script>
 </body>
 </html>

@@ -79,12 +79,19 @@ async def watch_match(code: str):
         players_per_side=match["players_per_side"],
         rules_preset=match["rules_preset"],
         watch_code=match.get("watch_code"),
+        ground_id=match.get("ground_id"),
         created_at=match["created_at"],
     )
+
+    ground = None
+    if match.get("ground_id"):
+        g = supabase_client.table("grounds").select("name,latitude,longitude").eq("id", match["ground_id"]).execute()
+        ground = g.data[0] if g.data else None
 
     return {
         "watch_code": match.get("watch_code"),
         "match_name": match_name or f"{match['overs']}-over match",
+        "ground": ground,
         "player_names": player_names,
         "scorecard": MatchScorecard(match=match_out, rules=rules, innings_list=innings_scorecards),
     }

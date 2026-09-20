@@ -1,5 +1,3 @@
-import os
-import httpx
 from fastapi import APIRouter, HTTPException, Header
 from typing import Optional
 from collections import defaultdict
@@ -13,10 +11,6 @@ from app.models import (
 )
 
 router = APIRouter()
-
-_SUPABASE_URL = os.environ["SUPABASE_URL"]
-_SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
-
 
 
 def _verify_jwt(authorization: Optional[str]) -> object:
@@ -282,15 +276,9 @@ async def delete_account(authorization: Optional[str] = Header(default=None)):
     except Exception as e:
         raise HTTPException(500, f"Failed to delete sessions: {e}")
 
-    url = f"{_SUPABASE_URL}/auth/v1/admin/users/{user.id}"
-    headers = {
-        "apikey": _SUPABASE_SECRET_KEY,
-        "Authorization": f"Bearer {_SUPABASE_SECRET_KEY}",
-    }
-    async with httpx.AsyncClient() as client:
-        r = await client.delete(url, headers=headers, timeout=10)
-    if r.status_code not in (200, 204):
-        detail = r.json().get("message") or r.text
-        raise HTTPException(r.status_code, f"Failed to delete auth account: {detail}")
+    try:
+        supabase_client.auth.admin.delete_user(str(user.id))
+    except Exception as e:
+        raise HTTPException(getattr(e, "status", None) or 500, f"Failed to delete auth account: {e}")
 
     return {"message": "Account deleted."}

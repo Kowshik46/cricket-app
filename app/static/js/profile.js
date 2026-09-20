@@ -1,13 +1,13 @@
 var SUPA_URL  = window.SUPA_URL || '';
-var SUPA_ANON = window.SUPA_ANON || '';
+var SUPA_PUBLISHABLE = window.SUPA_PUBLISHABLE || '';
 var supaAuth  = null;
 var currentUser = null;
 var historyLoaded = false;
 var statsLoaded   = false;
 
-if(SUPA_URL && SUPA_ANON && !SUPA_ANON.startsWith('your-')){
+if(SUPA_URL && SUPA_PUBLISHABLE && !SUPA_PUBLISHABLE.startsWith('your-')){
   try {
-    supaAuth = (window.supabase || window.supabase_js).createClient(SUPA_URL, SUPA_ANON);
+    supaAuth = (window.supabase || window.supabase_js).createClient(SUPA_URL, SUPA_PUBLISHABLE);
   } catch(e){ console.warn('Supabase init failed:', e); }
 }
 

@@ -1,0 +1,39 @@
+/* Admin-only additions; base components come from event.css */
+.wrap.wide{max-width:720px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:480px){.two{grid-template-columns:1fr}}
+.err{color:#ffb3b3;font-size:.82rem;margin-top:8px}
+
+/* event cards */
+.evc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.evc-name{font-family:'Playfair Display',serif;font-size:1.2rem;line-height:1.2}
+.evc-sub{color:var(--muted);font-size:.78rem;margin-top:3px;line-height:1.5}
+.evc-sub a{color:var(--gold);text-decoration:none}
+.evc-code{display:flex;align-items:center;gap:12px;margin:12px 0;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04)}
+.evc-code .code-chip{font-size:1.15rem}
+.evc-code .cnt{margin-left:auto;font-family:'DM Mono',monospace;font-size:.68rem;color:var(--muted);text-align:right;line-height:1.5}
+.panel{margin-top:14px;padding-top:14px;border-top:1px solid var(--cb)}
+.panel h3{font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:14px 0 8px}
+.panel h3:first-child{margin-top:0}
+.grow-input{flex:1 1 100%}
+
+/* visitors */
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.kpi{background:var(--card);border:1px solid var(--cb);border-radius:14px;padding:12px}
+.kpi .v{font-family:'Playfair Display',serif;font-size:1.7rem;line-height:1.1}
+.kpi .l{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.bar-row{display:grid;grid-template-columns:86px 1fr 74px;align-items:center;gap:10px;padding:5px 0;font-size:.78rem}
+.bar-row.lbl{grid-template-columns:minmax(70px,120px) 1fr 44px}
+.bar-row .k{color:var(--muted);font-family:'DM Mono',monospace;font-size:.68rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-row.lbl .k{color:var(--cream);font-family:'DM Sans',sans-serif;font-size:.8rem}
+.bar-row .track{height:10px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden}
+.bar-row .fill{height:100%;border-radius:5px;background:var(--grass-l);min-width:2px}
+.bar-row .n{font-family:'DM Mono',monospace;font-size:.7rem;text-align:right}
+.scroll-x{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:.74rem;white-space:nowrap}
+.tbl th{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 10px 6px 0;font-weight:500}
+.tbl td{padding:7px 10px 7px 0;border-top:1px solid var(--cb)}
+.tbl td.mono{font-family:'DM Mono',monospace;color:var(--muted)}
+
+.gitem .sub{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted)}
+.gitem .sub a{color:var(--gold);text-decoration:none}
