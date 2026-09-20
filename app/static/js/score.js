@@ -534,6 +534,10 @@ const ruleToggles = { wide_extra: true, nb_extra: true, free_hit: true };
 // share / watch
 let _watchCode = null;
 
+// scorer handover: {matchId, epoch} — sent as X-Scorer-Epoch so the server can reject us once someone else takes over
+let _scorerEpoch = null;
+const SCORER_CHANGED = 'Scoring was handed over to someone else';
+
 // modal pick state
 let _wideRuns = 0, _nbRuns = 0, _byeRuns = 1, _byeType = 'bye', _wicketType = null;
 let _runOutTarget = 'striker';      // 'striker' | 'non_striker'
@@ -547,11 +551,14 @@ let _openingPairSubmitting = false; // guard against double-tap on "Start Inning
 // ═══════════════════════════════════════════════════════════════
 
 async function api(method, path, body) {
-  const opts = { method, headers: {'Content-Type':'application/json'} };
+  const headers = {'Content-Type':'application/json'};
+  if (_scorerEpoch && _scorerEpoch.matchId === matchState.matchId) headers['X-Scorer-Epoch'] = String(_scorerEpoch.epoch);
+  const opts = { method, headers };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const r = await fetch('/api' + path, opts);
   if (!r.ok) {
     const e = await r.json().catch(() => ({detail: r.statusText}));
+    if (r.status === 409 && e.detail === SCORER_CHANGED) _showHandedOver();
     throw new Error(e.detail || r.statusText);
   }
   if (r.status === 204) return null;
@@ -606,6 +613,172 @@ function copyShareLink() {
       toast('Link copied!');
     });
 }
+
+// ── Scorer handover ────────────────────────────────────────────────────────
+function _adoptEpoch(matchId, epoch) {
+  _scorerEpoch = { matchId, epoch };
+  try { sessionStorage.setItem('cricket_scorer_epoch_' + matchId, String(epoch)); } catch(_) {}
+}
+
+// Survives a reload in the same tab, so a reloaded stale device is still locked out.
+function _storedEpoch(matchId) {
+  try {
+    const n = parseInt(sessionStorage.getItem('cricket_scorer_epoch_' + matchId), 10);
+    return Number.isInteger(n) ? n : null;
+  } catch(_) { return null; }
+}
+
+function _showHandedOver() {
+  const watch = document.getElementById('handedOverWatch');
+  if (_watchCode) { watch.href = '/watch?code=' + _watchCode; watch.style.display = 'block'; }
+  document.getElementById('handedOverOverlay').style.display = 'flex';
+}
+
+async function openHandoverModal() {
+  if (!matchState.matchId) return;
+  // The next scorer rebuilds from the DB, so every tapped ball must have landed first.
+  await Promise.race([ballQueue.drain().catch(() => {}), new Promise(r => setTimeout(r, 8000))]);
+  if (ballQueue.pendingCount > 0) { toast('Still syncing balls — try again in a moment', true); return; }
+  try {
+    const r = await api('POST', `/matches/${matchState.matchId}/handover`);
+    _adoptEpoch(matchState.matchId, r.epoch);
+    document.getElementById('handoverCode').textContent = r.code;
+    document.getElementById('handoverLink').value = window.location.origin + '/score?takeover=' + r.code;
+    openModal('handoverModal');
+  } catch(e) {
+    toast(e.message, true);
+  }
+}
+
+function copyHandoverLink() {
+  const inp = document.getElementById('handoverLink');
+  navigator.clipboard.writeText(inp.value)
+    .then(() => toast('Link copied!'))
+    .catch(() => { inp.select(); document.execCommand('copy'); toast('Link copied!'); });
+}
+
+function shareHandoverWhatsApp() {
+  const url  = document.getElementById('handoverLink').value;
+  const code = document.getElementById('handoverCode').textContent;
+  const name = (document.getElementById('matchName').value || '').trim();
+  const text = '🏏 Your turn to score' + (name ? ' — ' + name : '') + '\nHandover code: ' + code + '\n' + url;
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+}
+
+async function takeOverScoring() {
+  const code = document.getElementById('takeoverCode').value.trim().toUpperCase();
+  if (code.length < 4) { toast('Enter the handover code', true); return; }
+  try {
+    const r = await api('POST', '/matches/takeover', { code });
+    _adoptEpoch(r.match_id, r.epoch);
+    // Team-linked matches need ?match_id (drives isTeamLinked) + ?session (player rosters)
+    const team = r.match_type === 'team' && r.session_id;
+    location.href = '/score?' + (team ? `match_id=${r.match_id}&session=${r.session_id}&` : '') + 'resume=' + r.match_id;
+  } catch(e) {
+    toast(e.message, true);
+  }
+}
+
+// Rebuild the whole page state for a match that is already in progress, then carry on scoring.
+async function resumeMatch(matchId) {
+  showView('viewScoring');   // the hydrate overlay lives inside this view
+  _showHydrateOverlay('Taking over scoring…');
+  try {
+    const [match, rules, innings] = await Promise.all([
+      api('GET', `/matches/${matchId}`),
+      api('GET', `/matches/${matchId}/rules`),
+      api('GET', `/matches/${matchId}/innings`),
+    ]);
+    const inn1 = innings.find(i => i.innings_number === 1);
+    const inn2 = innings.find(i => i.innings_number === 2);
+    if (!inn1) {   // handed over before the first innings began: nothing to resume, use the normal setup
+      _hideHydrateOverlay();
+      showView('viewSetup');
+      if (isTeamLinked) await loadTeamLinkedSetup(); else toast('This match has not started yet', true);
+      return;
+    }
+
+    matchState.matchId = matchId;
+    _adoptEpoch(matchId, _storedEpoch(matchId) ?? match.scorer_epoch ?? 0);
+    _setWatchCode(match.watch_code);
+    cfg.overs = match.overs;
+    cfg.playersPerSide = match.players_per_side;
+    cfg.maxWickets = match.players_per_side - 1;
+    cfg.team1 = inn1.batting_team;
+    cfg.team2 = inn1.bowling_team;
+    cfg.rules = { wide_extra: rules.wide_runs > 0, nb_extra: rules.no_ball_runs > 0, free_hit: !!rules.free_hit_enabled };
+    Object.assign(ruleToggles, cfg.rules);
+    ['wide_extra:tgl-wide', 'nb_extra:tgl-nb', 'free_hit:tgl-fh'].forEach(pair => {
+      const [k, id] = pair.split(':');
+      document.getElementById(id).classList.toggle('on', cfg.rules[k]);
+    });
+
+    const name = match.name || '';
+    document.getElementById('matchName').value = name;
+    const cut = name.lastIndexOf(' - Match ');
+    cfg.sessionName = cut > 0 ? name.slice(0, cut) : '';
+    cfg.matchNum = parseInt((/Match (\d+)$/.exec(name) || [])[1], 10) || 1;
+
+    let playersOf = null;
+    if (isTeamLinked && match.session_id) {
+      document.getElementById('teamLinkedExtras').style.display = '';
+      document.getElementById('maxBowlerOversInput').value = rules.max_overs_per_bowler ?? '';
+      document.getElementById('maxThrowOversInput').value = rules.max_throw_overs_per_team ?? '';
+      ['team1Name', 'team2Name'].forEach((id, i) => {
+        const el = document.getElementById(id);
+        el.value = i ? cfg.team2 : cfg.team1; el.readOnly = true; el.style.opacity = '.65';
+      });
+      const teams = await api('GET', `/sessions/${match.session_id}/teams`);
+      playersOf = team => teams.assignments.filter(a => a.team_name === team)
+        .map(a => ({ id: String(a.player_id), name: a.player_name, can_bowl: a.can_bowl, bowl_type: a.bowl_type || 'legal' }));
+    }
+    const setPlayers = (bat, bow) => {
+      if (!playersOf) return;
+      matchState.battingTeamPlayers = playersOf(bat);
+      matchState.bowlingTeamPlayers = playersOf(bow);
+      matchState._batTeamName = bat;
+    };
+    const scoreOf = sc => ({ runs: sc.total_runs, wickets: sc.total_wickets, overs: sc.total_overs });
+    const inningsScore = id => api('GET', `/matches/${matchId}/innings/${id}/scorecard`);
+
+    const live = [inn2, inn1].find(i => i && i.status === 'live');
+    if (live) {
+      setPlayers(live.batting_team, live.bowling_team);
+      matchState.inningsId  = live.id;
+      matchState.inningsNum = live.innings_number;
+      if (live.innings_number === 2) matchState.inn1Score = scoreOf(await inningsScore(inn1.id));
+      showView('viewScoring');
+      updateScoringHeader();
+      await hydrateEngine(matchId, live.id);   // also prompts for a missing batter/bowler
+    } else if (!inn2) {   // first innings done, second not started: innings break
+      setPlayers(inn1.batting_team, inn1.bowling_team);
+      matchState.inningsId = inn1.id;
+      _hideHydrateOverlay();
+      _showInningsBreak(await inningsScore(inn1.id));
+    } else {              // both innings done
+      matchState.inn1Score = scoreOf(await inningsScore(inn1.id));
+      matchState.inningsId = inn2.id;
+      _hideHydrateOverlay();
+      await finishMatch(await inningsScore(inn2.id));
+    }
+    toast("You're now scoring this match");
+  } catch(e) {
+    // hydrateEngine already shows its own Retry overlay; anything else means we never got going
+    if (document.getElementById('hydrateRetryBtn').style.display !== 'none') return;
+    _hideHydrateOverlay();
+    showView('viewSetup');
+    toast(e.message, true);
+  }
+}
+
+// After a rebuild the previous scorer may have stopped mid-wicket or mid-over-change.
+async function _promptCreaseVacancies() {
+  if (!isTeamLinked) return;
+  if (engine.strikerId === null || engine.nonStrikerId === null) {
+    await openNewBatterModal(engine.strikerId === null ? 'striker' : 'non_striker');
+  }
+  if (engine.bowlerId === null) await openNewBowlerModal((engine.legalBalls / 6) | 0);
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 function showView(id) {
@@ -614,6 +787,8 @@ function showView(id) {
   document.querySelectorAll('.bottom-bar').forEach(b => b.style.display = 'none');
   const bar = document.getElementById('bar-' + id);
   if (bar) bar.style.display = 'flex';
+  document.getElementById('btnHandover').style.display =
+    (id === 'viewScoring' || id === 'viewInnBreak') && matchState.matchId ? '' : 'none';
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
@@ -675,7 +850,16 @@ function buildRulesObject(extra = {}) {
   const syncEl = document.getElementById('syncStatus');
   if (syncEl) ballQueue.setSyncIndicator(syncEl);
 
-  if (isTeamLinked) {
+  const takeoverCode = p.get('takeover');
+  if (takeoverCode) {
+    document.getElementById('takeoverCode').value = takeoverCode.toUpperCase();
+    document.getElementById('takeoverCard').open = true;
+  }
+  if (isTeamLinked) document.getElementById('takeoverCard').style.display = 'none';
+
+  if (p.get('resume')) {
+    await resumeMatch(p.get('resume'));
+  } else if (isTeamLinked) {
     await loadTeamLinkedSetup();
   }
 })();
@@ -850,6 +1034,7 @@ async function hydrateEngine(matchId, inningsId) {
       renderBoard(sc);
       setFreehitBanner(engine.nextBallIsFreeHit);
       _hideHydrateOverlay();
+      await _promptCreaseVacancies();
       return;
 
     } catch (err) {
@@ -1100,6 +1285,10 @@ async function autoEndFirstInnings(sc) {
     await api('POST', `/matches/${matchState.matchId}/innings/${matchState.inningsId}/complete`);
   } catch(e) { /* ignore */ }
 
+  _showInningsBreak(sc);
+}
+
+function _showInningsBreak(sc) {
   matchState.inn1Score = { runs: sc.total_runs, wickets: sc.total_wickets, overs: sc.total_overs };
   const target = sc.total_runs + 1;
 

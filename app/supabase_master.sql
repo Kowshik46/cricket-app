@@ -69,10 +69,13 @@ create table if not exists matches (
   rules_preset     text        not null default 'standard',
   watch_code       text        unique,
   name             text,
+  scorer_code      text,                       -- one-time scoring handover code (cleared once redeemed)
+  scorer_epoch     integer     not null default 0, -- bumped on each takeover; stale scorers get 409
   created_at       timestamptz not null default now()
 );
 
 create unique index if not exists matches_watch_code_idx on matches(watch_code);
+create unique index if not exists matches_scorer_code_idx on matches(scorer_code) where scorer_code is not null;
 
 create table if not exists match_rules (
   id         uuid        primary key default gen_random_uuid(),

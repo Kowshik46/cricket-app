@@ -431,6 +431,15 @@ option{background:#0e1c28;color:var(--cream)}
   cursor:pointer;transition:all .15s;
 }
 .btn-share:hover{border-color:var(--gold);color:var(--gold)}
+.page-header{gap:6px}
+.btn-share{white-space:nowrap}
+
+/* ── old scorer's screen after a takeover (above every modal) ── */
+.handed-over{
+  position:fixed;inset:0;background:rgba(8,15,20,.97);z-index:300;
+  align-items:center;justify-content:center;padding:24px;
+}
+.handed-over .hydrate-box{max-width:340px;width:100%}
 
 /* ── share modal content ────────────────────── */
 .share-code-display{

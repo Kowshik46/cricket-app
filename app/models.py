@@ -257,7 +257,12 @@ class MatchOut(BaseModel):
     rules_preset: str
     watch_code: Optional[str] = None
     name: Optional[str] = None
+    scorer_epoch: int = 0  # NOT scorer_code — MatchOut is public via /watch
     created_at: datetime
+
+
+class TakeoverRequest(BaseModel):
+    code: str = Field(..., min_length=4, max_length=12)
 
 
 class InningsCreate(BaseModel):

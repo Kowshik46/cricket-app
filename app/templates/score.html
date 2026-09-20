@@ -17,6 +17,7 @@
     <a class="btn-back" href="/">← Home</a>
     <div class="page-title">Cricket <em>Score</em></div>
     <span id="syncStatus" class="sync-pill" style="display:none"></span>
+    <button class="btn-share" id="btnHandover" onclick="openHandoverModal()" style="display:none">🔁 Hand over</button>
     <button class="btn-share" id="btnShare" onclick="openShareModal()" style="display:none">📤 Share</button>
   </div>
 
@@ -24,6 +25,18 @@
        SETUP VIEW
   ══════════════════════════════════════════ -->
   <div class="view on" id="viewSetup">
+    <details class="card" id="takeoverCard" style="margin-top:4px">
+      <summary style="cursor:pointer;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--gold)">🔁 Got a handover code? Take over scoring</summary>
+      <p style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin:10px 0;line-height:1.6">
+        Enter the code the current scorer gave you. You'll continue the same match from where they stopped.
+      </p>
+      <div class="share-link-row">
+        <input class="finput" type="text" id="takeoverCode" placeholder="CODE" maxlength="12" autocomplete="off" autocapitalize="characters"
+               style="text-transform:uppercase;letter-spacing:4px;text-align:center" onkeydown="if(event.key==='Enter')takeOverScoring()">
+        <button class="btn-copy" style="padding:11px 16px" onclick="takeOverScoring()">Take over</button>
+      </div>
+    </details>
+
     <div class="card" style="margin-top:4px">
       <div class="ctitle">Match Setup</div>
 
@@ -503,6 +516,37 @@
     <div class="modal-actions" style="margin-top:14px">
       <button class="btn-cancel" onclick="closeModal('shareMatchModal')">Close</button>
     </div>
+  </div>
+</div>
+
+<!-- ── HANDOVER MODAL ────────── -->
+<div class="modal-bg" id="handoverModal">
+  <div class="modal">
+    <h2>🔁 Hand over scoring</h2>
+    <p style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-top:-6px;margin-bottom:16px;line-height:1.6">
+      Give this code to the next scorer. They enter it on the Score page (or open the link) and carry on from this exact ball.
+      <b style="color:var(--cream)">Once they take over, this phone stops scoring.</b> The code works once.
+    </p>
+    <div class="share-code-display" id="handoverCode">——————</div>
+    <div class="share-link-row" style="margin-top:12px">
+      <input class="finput finput-sm share-link-input" id="handoverLink" type="text" readonly>
+      <button class="btn-copy" onclick="copyHandoverLink()">📋</button>
+    </div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn-cancel" onclick="closeModal('handoverModal')">Close</button>
+      <button class="btn-ok green" onclick="shareHandoverWhatsApp()">WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shown on the old scorer's device once someone else has taken over; never dismissable. -->
+<div id="handedOverOverlay" class="handed-over" style="display:none">
+  <div class="hydrate-box">
+    <div style="font-size:2.4rem;margin-bottom:8px">🔁</div>
+    <p style="color:var(--cream);font-size:.95rem;margin-bottom:6px">Scoring was handed over</p>
+    <p>Someone else is now scoring this match, so this phone can no longer record balls.</p>
+    <a id="handedOverWatch" class="btnprim" style="display:none;text-decoration:none;margin-bottom:8px">👁 Follow live</a>
+    <a class="btnout" href="/" style="text-decoration:none;display:block;text-align:center">Home</a>
   </div>
 </div>
 

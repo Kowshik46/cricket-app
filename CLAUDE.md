@@ -43,6 +43,11 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
   - Undo last ball (recomputes state from timeline)
   - Win detection mid-innings when chasing team passes target
   - Mobile-first one-handed scoring UI at `/score`
+- **Scorer handover** — the person scoring can hand scoring to someone else with a one-time code
+  - **🔁 Hand over** button in the score-page header (visible during scoring and the innings break) → `openHandoverModal()` waits for `ballQueue` to drain, `POST /matches/{id}/handover`, shows a 6-char code + `/score?takeover=CODE` link + WhatsApp button
+  - New scorer opens `/score` → **"Got a handover code?"** card at the top of Setup (or the shared link, which prefills it) → `takeOverScoring()` → `POST /matches/takeover` → redirects to `/score?[match_id=&session=&]resume=<matchId>` → `resumeMatch()` rebuilds cfg/teams/engine from the DB and continues (live innings, innings break, or the result screen)
+  - **Single scorer at a time:** redeeming the code bumps `matches.scorer_epoch`; every scoring write sends `X-Scorer-Epoch`, and the previous device's stale writes get `409` → blocking "Scoring was handed over" overlay (`#handedOverOverlay`) with a Follow-live link
+  - If the previous scorer stopped mid-wicket / mid-over-change, `hydrateEngine` → `_promptCreaseVacancies()` opens the new-batter / new-bowler modal for the new scorer
 - **Live spectator mode** — sharable watch code + QR code so anyone can follow the score in real time
   - Every match gets a unique 6-char alphanumeric `watch_code` (e.g. `X7K3M2`) stored in the DB
   - "📤 Share" button in the score page header opens a modal with the code, a copyable link, and a QR code
@@ -120,7 +125,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   │   └── watch.html              ← live spectator view (polls /api/watch/{code} every 5s)
 │   ├── static/
 │   │   ├── manifest.json           ← PWA manifest
-│   │   ├── sw.js                   ← service worker (cache version `cricket-v3`)
+│   │   ├── sw.js                   ← service worker (cache version `cricket-v4`)
 │   │   ├── css/                    ← extracted page styles (one file per template)
 │   │   │   ├── index.css
 │   │   │   ├── profile.css
@@ -192,6 +197,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 7. `supabase_team_score_migration.sql` — adds `bowl_type` to `players`, opening pair columns to `innings`, creates `innings_overs` table
 8. `supabase_watch_migration.sql` — adds `watch_code` unique column to `matches`
 9. `supabase_match_name_migration.sql` — adds `name text` column to `matches`
+10. `supabase_scorer_handover_migration.sql` — adds `scorer_code` + `scorer_epoch` to `matches` (scoring handover). Not required for the rest of the app to run — only `/handover` and `/takeover` fail until it is applied. `supabase_master.sql` already includes it
 
 ### Tables
 
@@ -262,6 +268,8 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 | `rules_preset` | `text` | `'standard'`, `'box'`, `'gully'`, `'custom'` |
 | `watch_code` | `text` nullable UNIQUE | 6-char alphanumeric; generated on `POST /api/matches`; used by `/api/watch/{code}` |
 | `name` | `text` nullable | Human-readable match name (e.g. "Chase game - Match 2"); set at creation, shown in history |
+| `scorer_code` | `text` nullable | Partial-unique. One-time scoring handover code (6 chars from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`); set by `POST …/handover`, cleared when redeemed. **Never returned by any read endpoint** (`MatchOut` is public via `/watch`) |
+| `scorer_epoch` | `integer` | default 0. Bumped on each takeover; a write carrying an older `X-Scorer-Epoch` gets `409` |
 | `created_at` | `timestamptz` | |
 
 #### `match_rules`
@@ -406,6 +414,8 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `GET` | `/api/matches` | `?session_id=` | List matches (latest 50, optional filter by session) |
 | `GET` | `/api/matches/{id}` | — | Get match |
 | `DELETE` | `/api/matches/{id}` | — | Delete match + all innings/balls |
+| `POST` | `/api/matches/{id}/handover` | — | Issue a one-time scorer handover code → `{code, epoch}`. Replaces any earlier unredeemed code. The current scorer keeps scoring until it is redeemed. Epoch-guarded (a locked-out device can't mint a code) |
+| `POST` | `/api/matches/takeover` | `TakeoverRequest` | Redeem a code (case-insensitive, single-use) → `{match_id, session_id, match_type, epoch}` and bump `scorer_epoch`. `404` for a wrong/used code (30 misses/min globally → `429`) |
 | `GET` | `/api/matches/{id}/rules` | — | Get current rules JSON |
 | `PATCH` | `/api/matches/{id}/rules` | `UpdateMatchRulesRequest` | Update rules |
 | `POST` | `/api/matches/{id}/innings` | `InningsCreate` | Create innings 1 or 2 |
@@ -421,7 +431,9 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `GET` | `/api/matches/{id}/innings/{inn_id}/eligible_bowlers` | — | Returns **all** bowling-team players eligible for next over with cap/block flags — `can_bowl` is NOT a filter here |
 | `GET` | `/api/matches/{id}/innings/{inn_id}/eligible_batters` | — | Returns batting-team players not yet dismissed and not currently at the crease; handles both striker and non-striker vacancy after run-outs |
 
-> **Score page** — `/score` (GET) renders `score.html`. Accepts query params `session`, `name`, `teamA`, `teamB`, `overs` to pre-populate setup form. Team-linked path also accepts `match_id` and `battingFirst` (team name that bats in innings 1, derived from toss decision).
+> **Scorer epoch guard** — `POST …/innings`, `…/complete`, `…/ball`, `…/undo`, `…/overs` and `…/handover` compare the `X-Scorer-Epoch` request header with `matches.scorer_epoch` and return `409 "Scoring was handed over to someone else"` on mismatch. A request with **no** header is allowed (older pages / API users). The client sends the header only after it has adopted an epoch for that match (`_adoptEpoch`: at handover, takeover or resume) and keeps it in `sessionStorage` so a reload of a locked-out device stays locked out.
+
+> **Score page** — `/score` (GET) renders `score.html`. Accepts query params `session`, `name`, `teamA`, `teamB`, `overs` to pre-populate setup form. Team-linked path also accepts `match_id` and `battingFirst` (team name that bats in innings 1, derived from toss decision). `?takeover=CODE` prefills the takeover card; `?resume=<matchId>` (plus `match_id` + `session` for team-linked matches) resumes an in-progress match instead of showing Setup.
 
 ### Watch (Spectator) — `/api/watch`
 | Method | Path | Auth | Description |
@@ -466,9 +478,10 @@ Base path for all session-scoped endpoints: `/api/sessions/{session_id}`
 | `UpdatePasswordRequest` | request (unused — password change is browser-side) | `password` (min 6) |
 | `MatchRules` | config | `wide_runs, wide_counts_as_ball, wide_reball, no_ball_runs, no_ball_counts_as_ball, no_ball_reball, free_hit_enabled, free_hit_dismissals, wicket_types[], last_man_standing, retirement_runs, boundary_four, boundary_six, max_overs_per_bowler?, max_throw_overs_per_team?` |
 | `MatchCreate` | request | `session_id?, match_type, overs, players_per_side, rules_preset, rules?, name?` |
-| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, watch_code?, name?, created_at` |
+| `MatchOut` | response | `id, session_id, match_type, status, overs, players_per_side, rules_preset, watch_code?, name?, scorer_epoch=0, created_at` |
 | `InningsSummaryItem` | inner | `innings_number, batting_team, bowling_team, runs, wickets, overs_str, status` — lightweight innings score for history |
 | `MatchSummaryItem` | inner | `id, name?, status, created_at, innings_list[InningsSummaryItem]` — match summary inside `MatchHistoryItem` |
+| `TakeoverRequest` | request | `code` (4–12 chars) |
 | `InningsCreate` | request | `batting_team, bowling_team, opening_striker_id?, opening_non_striker_id?` |
 | `InningsOut` | response | `id, match_id, innings_number, batting_team, bowling_team, target, status, created_at, opening_striker_id?, opening_non_striker_id?` |
 | `OverAssignmentCreate` | request | `bowler_id, bowl_type='legal'` |
@@ -523,7 +536,7 @@ boot — do not move the Jinja vars into the static `.js` files (Jinja isn't app
 
 To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA service worker
 (`app/static/sw.js`) pre-caches all six static files at install — bump `CACHE` (currently
-`cricket-v3`) whenever you add a new top-level static asset.
+`cricket-v4`) whenever you add a new top-level static asset.
 
 ### UI Structure
 | Section | ID | Description |
@@ -612,6 +625,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | `_runOutRuns` | integer | Runs completed before the run-out (0–3); shown as a pick row when Run Out is selected; included in `body.runs` of the ball POST |
 | `_newBatterPosition` | `'striker'`\|`'non_striker'` | Which crease the incoming batter fills; shown in new-batter modal with other-end context; swappable via `swapNewBatterPosition()` |
 | `_pendingNonStrikerId` | string\|null | Replacement non-striker UUID after a non-striker run-out; piggybacked as `metadata.new_non_striker_id` on the very next ball |
+| `_scorerEpoch` | `{matchId, epoch}`\|null | Epoch this device holds for the current match; `api()` sends it as `X-Scorer-Epoch` while `matchId` matches `matchState.matchId`. A `409` `SCORER_CHANGED` response calls `_showHandedOver()` |
 | `_openingPairSubmitting` | boolean | Guard flag preventing double-tap from submitting the Opening Pair modal twice (creates duplicate innings) |
 | `matchState._batTeamName` | string\|null | Name of team currently mapped to `battingTeamPlayers`; used by "Play Again" to decide whether to swap player arrays when changing which team bats first |
 
@@ -683,7 +697,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 5. `supaAuth.auth.updateUser({ password })` sets the new password; user is signed in automatically
 
 ### Service Worker
-- Cache name: `cricket-v3`
+- Cache name: `cricket-v4`
 - Shell cached on install: `/`, Google Fonts URL
 - Strategy: cache-first for shell/static, **network-first for `/api/`**
 
@@ -746,6 +760,7 @@ sessions where it is currently `NULL`, atomically assigning them to the new user
 [ ]11. Run supabase_team_score_migration.sql (bowl_type on players, opening pair on innings, innings_overs table)
 [ ]12. Run supabase_watch_migration.sql (watch_code column on matches)
 [ ]13. Run supabase_match_name_migration.sql (name column on matches)
+[ ]13b. Run supabase_scorer_handover_migration.sql (scorer_code / scorer_epoch on matches — scoring handover)
 [ ]14. Set SUPABASE_ANON_KEY in .env (if using auth)
 [ ]15. Add icon-192.png and icon-512.png to app/static/icons/
 [ ]16. Run server: uvicorn app.main:app --reload --port 8000
@@ -822,6 +837,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **`can_bowl` is a balancing hint, not a field rule**: it only affects team generation; during a match ALL players in the bowling team are eligible to bowl
 - **Email/password changes**: always browser-side via Supabase JS SDK — never add backend endpoints for these
 - **Admin API calls**: only httpx DELETE for account deletion; all other auth admin ops are browser-side
+- **One scorer per match**: the engine is client-side, so two devices scoring the same match would corrupt the timeline. Any new endpoint that writes to a match's innings/balls must call `_assert_current_scorer(match, request)`. Never expose `scorer_code` in a response model
 - **Scorekeeping is stateless**: score is always derived from `ball_events` timeline — never store a mutable score counter
 - **`_derive_batting_state()`** walks the ball timeline to compute current striker, non-striker, bowler, and over number; reads `metadata.run_out_end` to decide which end is vacated on a run-out, and `metadata.new_non_striker_id` to seat the replacement non-striker
 - **Client `GameEngine` mirrors `matches.py` helpers**: `_isLegal`, `_extrasFor`, `_runsFor`, `_updateBatterStats`, `_updateBowlerStats`, and the per-ball reduce loop must stay in lockstep with the Python equivalents. Any rule change in `matches.py` MUST be ported to the JS engine in the same PR, or hydration will produce a state that diverges from the next ball's POST response. Always run a quick end-to-end ball replay after touching either side.

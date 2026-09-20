@@ -6,14 +6,16 @@ score counters are stored. This makes undo trivially correct.
 """
 import random
 import string
-from fastapi import APIRouter, HTTPException
+import time
+from collections import deque
+from fastapi import APIRouter, HTTPException, Request
 from app.database import supabase_client
 from app.models import (
     MatchCreate, MatchOut, MatchRules, RULES_PRESETS,
     InningsCreate, InningsOut, InningsScorecard, MatchScorecard,
     BallEventCreate, BallEventOut, UpdateMatchRulesRequest,
     OverAssignmentCreate, OverAssignmentOut,
-    BatterStats, BowlerStats,
+    BatterStats, BowlerStats, TakeoverRequest,
 )
 
 router = APIRouter()
@@ -29,6 +31,38 @@ def _gen_watch_code() -> str:
         if not existing.data:
             return code
     return ''.join(random.choices(_WATCH_CODE_CHARS, k=8))  # fallback to 8 chars
+
+
+# ── scorer handover ───────────────────────────────────────────────────────────
+# The scoring engine lives in the scorer's browser, so two devices scoring one match would corrupt the
+# timeline. A takeover bumps matches.scorer_epoch; clients send X-Scorer-Epoch and a stale one gets 409.
+
+_SCORER_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I — read aloud or typed off a screen
+SCORER_CHANGED = "Scoring was handed over to someone else"
+_takeover_misses: deque = deque()  # global (X-Forwarded-For is forgeable) sliding window of wrong codes
+
+
+def _gen_scorer_code() -> str:
+    for _ in range(10):
+        code = ''.join(random.choices(_SCORER_CODE_CHARS, k=6))
+        if not supabase_client.table("matches").select("id").eq("scorer_code", code).execute().data:
+            return code
+    raise HTTPException(500, "Could not generate a handover code")
+
+
+def _assert_current_scorer(match: dict, request: Request):
+    """409 if this client was handed over. Clients that never sent an epoch (older pages) pass."""
+    sent = request.headers.get("x-scorer-epoch")
+    if sent is not None and sent != str(match.get("scorer_epoch") or 0):
+        raise HTTPException(409, SCORER_CHANGED)
+
+
+def _throttle_takeover(limit: int = 30, window: int = 60):
+    now = time.monotonic()
+    while _takeover_misses and now - _takeover_misses[0] > window:
+        _takeover_misses.popleft()
+    if len(_takeover_misses) >= limit:
+        raise HTTPException(429, "Too many wrong codes — wait a minute and try again")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -475,6 +509,40 @@ async def get_match(match_id: str):
     return _get_match_or_404(match_id)
 
 
+@router.post("/takeover")
+async def takeover_scoring(body: TakeoverRequest):
+    """Redeem a handover code: becomes the match's scorer, and locks out the previous device."""
+    _throttle_takeover()
+    code = body.code.strip().upper()
+    res = supabase_client.table("matches").select("*").eq("scorer_code", code).execute()
+    if not res.data:
+        _takeover_misses.append(time.monotonic())
+        raise HTTPException(404, "Invalid or already used code")
+    match = res.data[0]
+    epoch = (match.get("scorer_epoch") or 0) + 1
+    # conditional on the code still being set, so two people redeeming at once can't both win
+    claimed = (
+        supabase_client.table("matches")
+        .update({"scorer_code": None, "scorer_epoch": epoch})
+        .eq("id", match["id"]).eq("scorer_code", code)
+        .execute()
+    )
+    if not claimed.data:
+        raise HTTPException(404, "Invalid or already used code")
+    return {"match_id": match["id"], "session_id": match.get("session_id"),
+            "match_type": match["match_type"], "epoch": epoch}
+
+
+@router.post("/{match_id}/handover")
+async def start_handover(match_id: str, request: Request):
+    """Issue a one-time code for someone else to take over scoring. The current scorer keeps scoring until it is redeemed."""
+    match = _get_match_or_404(match_id)
+    _assert_current_scorer(match, request)
+    code = _gen_scorer_code()
+    supabase_client.table("matches").update({"scorer_code": code}).eq("id", match_id).execute()
+    return {"code": code, "epoch": match.get("scorer_epoch") or 0}
+
+
 @router.patch("/{match_id}/rules", response_model=dict)
 async def update_rules(match_id: str, body: UpdateMatchRulesRequest):
     _get_match_or_404(match_id)
@@ -496,8 +564,9 @@ async def get_rules(match_id: str):
 # ── Innings ───────────────────────────────────────────────────────────────────
 
 @router.post("/{match_id}/innings", response_model=InningsOut, status_code=201)
-async def create_innings(match_id: str, body: InningsCreate):
+async def create_innings(match_id: str, body: InningsCreate, request: Request):
     match = _get_match_or_404(match_id)
+    _assert_current_scorer(match, request)
 
     existing = (
         supabase_client.table("innings")
@@ -551,9 +620,9 @@ async def list_innings(match_id: str):
 
 
 @router.post("/{match_id}/innings/{innings_id}/complete", response_model=InningsOut)
-async def complete_innings(match_id: str, innings_id: str):
+async def complete_innings(match_id: str, innings_id: str, request: Request):
     """Mark innings as completed. For 2-innings matches, sets the target on innings 2."""
-    _get_match_or_404(match_id)
+    _assert_current_scorer(_get_match_or_404(match_id), request)
     innings = _get_innings_or_404(innings_id)
 
     if innings["innings_number"] == 1:
@@ -586,8 +655,8 @@ async def complete_innings(match_id: str, innings_id: str):
 # ── Ball events ───────────────────────────────────────────────────────────────
 
 @router.post("/{match_id}/innings/{innings_id}/ball", response_model=InningsScorecard)
-async def record_ball(match_id: str, innings_id: str, body: BallEventCreate):
-    _get_match_or_404(match_id)
+async def record_ball(match_id: str, innings_id: str, body: BallEventCreate, request: Request):
+    _assert_current_scorer(_get_match_or_404(match_id), request)
     innings = _get_innings_or_404(innings_id)
 
     if innings["status"] == "completed":
@@ -629,9 +698,9 @@ async def record_ball(match_id: str, innings_id: str, body: BallEventCreate):
 
 
 @router.post("/{match_id}/innings/{innings_id}/undo", response_model=InningsScorecard)
-async def undo_last_ball(match_id: str, innings_id: str):
+async def undo_last_ball(match_id: str, innings_id: str, request: Request):
     """Delete the most recent ball event and return the updated scorecard."""
-    _get_match_or_404(match_id)
+    _assert_current_scorer(_get_match_or_404(match_id), request)
     innings = _get_innings_or_404(innings_id)
 
     balls = _get_balls(innings_id)
@@ -702,9 +771,9 @@ async def get_timeline(match_id: str, innings_id: str):
 # ── Over assignments ─────────────────────────────────────────────────────────
 
 @router.post("/{match_id}/innings/{innings_id}/overs", response_model=OverAssignmentOut, status_code=201)
-async def assign_over(match_id: str, innings_id: str, body: OverAssignmentCreate):
+async def assign_over(match_id: str, innings_id: str, body: OverAssignmentCreate, request: Request):
     """Assign a bowler + bowl type to the next over. Validates consecutive-over ban and caps."""
-    _get_match_or_404(match_id)
+    _assert_current_scorer(_get_match_or_404(match_id), request)
     innings = _get_innings_or_404(innings_id)
 
     if innings["status"] == "completed":
