@@ -44,7 +44,7 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
   - Win detection mid-innings when chasing team passes target
   - Mobile-first one-handed scoring UI at `/score`
 - **Scorer handover** — the person scoring can hand scoring to someone else with a one-time code
-  - **🔁 Hand over** button in the score-page header (visible during scoring and the innings break) → `openHandoverModal()` waits for `ballQueue` to drain, `POST /matches/{id}/handover`, shows a 6-char code + `/score?takeover=CODE` link + WhatsApp button
+  - **🔁 Hand over** button in the score-page header (visible during scoring and the innings break) → `openHandoverModal()` waits for `ballQueue` to drain, `POST /matches/{id}/handover`, shows a 6-char code + a QR code of the `/score?takeover=CODE` link (scan → code prefilled) + the link + WhatsApp button
   - New scorer opens `/score` → **"Got a handover code?"** card at the top of Setup (or the shared link, which prefills it) → `takeOverScoring()` → `POST /matches/takeover` → redirects to `/score?[match_id=&session=&]resume=<matchId>` → `resumeMatch()` rebuilds cfg/teams/engine from the DB and continues (live innings, innings break, or the result screen)
   - **Single scorer at a time:** redeeming the code bumps `matches.scorer_epoch`; every scoring write sends `X-Scorer-Epoch`, and the previous device's stale writes get `409` → blocking "Scoring was handed over" overlay (`#handedOverOverlay`) with a Follow-live link
   - If the previous scorer stopped mid-wicket / mid-over-change, `hydrateEngine` → `_promptCreaseVacancies()` opens the new-batter / new-bowler modal for the new scorer
@@ -125,7 +125,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   │   └── watch.html              ← live spectator view (polls /api/watch/{code} every 5s)
 │   ├── static/
 │   │   ├── manifest.json           ← PWA manifest
-│   │   ├── sw.js                   ← service worker (cache version `cricket-v4`)
+│   │   ├── sw.js                   ← service worker (cache version `cricket-v5`)
 │   │   ├── css/                    ← extracted page styles (one file per template)
 │   │   │   ├── index.css
 │   │   │   ├── profile.css
@@ -536,7 +536,7 @@ boot — do not move the Jinja vars into the static `.js` files (Jinja isn't app
 
 To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA service worker
 (`app/static/sw.js`) pre-caches all six static files at install — bump `CACHE` (currently
-`cricket-v4`) whenever you add a new top-level static asset.
+`cricket-v5`) whenever you add a new top-level static asset.
 
 ### UI Structure
 | Section | ID | Description |
@@ -697,7 +697,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 5. `supaAuth.auth.updateUser({ password })` sets the new password; user is signed in automatically
 
 ### Service Worker
-- Cache name: `cricket-v4`
+- Cache name: `cricket-v5`
 - Shell cached on install: `/`, Google Fonts URL
 - Strategy: cache-first for shell/static, **network-first for `/api/`**
 

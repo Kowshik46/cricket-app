@@ -643,7 +643,12 @@ async function openHandoverModal() {
     const r = await api('POST', `/matches/${matchState.matchId}/handover`);
     _adoptEpoch(matchState.matchId, r.epoch);
     document.getElementById('handoverCode').textContent = r.code;
-    document.getElementById('handoverLink').value = window.location.origin + '/score?takeover=' + r.code;
+    const link = window.location.origin + '/score?takeover=' + r.code;
+    document.getElementById('handoverLink').value = link;
+    // Scanning opens /score with the code prefilled, so the new scorer only taps "Take over"
+    const qrWrap = document.getElementById('handoverQrWrap');
+    qrWrap.innerHTML = '';
+    new QRCode(qrWrap, { text: link, width: 180, height: 180, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
     openModal('handoverModal');
   } catch(e) {
     toast(e.message, true);

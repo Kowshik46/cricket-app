@@ -521,13 +521,14 @@
 
 <!-- ── HANDOVER MODAL ────────── -->
 <div class="modal-bg" id="handoverModal">
-  <div class="modal">
+  <div class="modal" style="max-height:92vh;overflow-y:auto">
     <h2>🔁 Hand over scoring</h2>
     <p style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-top:-6px;margin-bottom:16px;line-height:1.6">
       Give this code to the next scorer. They enter it on the Score page (or open the link) and carry on from this exact ball.
       <b style="color:var(--cream)">Once they take over, this phone stops scoring.</b> The code works once.
     </p>
     <div class="share-code-display" id="handoverCode">——————</div>
+    <div id="handoverQrWrap" style="display:flex;justify-content:center;margin:14px 0 2px"></div>
     <div class="share-link-row" style="margin-top:12px">
       <input class="finput finput-sm share-link-input" id="handoverLink" type="text" readonly>
       <button class="btn-copy" onclick="copyHandoverLink()">📋</button>
