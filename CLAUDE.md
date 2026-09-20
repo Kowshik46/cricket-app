@@ -43,6 +43,11 @@ bowling-balanced teams, and now includes a full **ball-by-ball scorekeeping** sy
   - Undo last ball (recomputes state from timeline)
   - Win detection mid-innings when chasing team passes target
   - Mobile-first one-handed scoring UI at `/score`
+- **"Are you sure?" guards on the score page** against accidental taps (one reusable `#confirmModal`, driven by `askConfirm({title,msg,ok,cancel,danger}) → Promise<boolean>` in `score.js`)
+  - **Undo** names the ball it will remove ("Wicket (bowled)", "Wide (1 run)", "Dot ball"…) and only acts on confirm
+  - **← Home** while scoring / at the innings break → "Leave the match?" (`leaveToHome`). A native `beforeunload` prompt covers refresh, swipe-back and closing the tab in those same views; it is switched off once the user confirms leaving, after a handover lock-out, and on the setup/result/scorecard screens
+  - **New Match** (scorecard screen) → `confirmNewMatch()`; **End Innings** keeps its own modal and now says it can't be undone
+  - The home page already confirms delete-session and new-match (`index.js`)
 - **Scorer handover** — the person scoring can hand scoring to someone else with a one-time code
   - **🔁 Hand over** button in the score-page header (visible during scoring and the innings break) → `openHandoverModal()` waits for `ballQueue` to drain, `POST /matches/{id}/handover`, shows a 6-char code + a QR code of the `/score?takeover=CODE` link (scan → code prefilled) + the link + WhatsApp button
   - New scorer opens `/score` → **"Got a handover code?"** card at the top of Setup (or the shared link, which prefills it) → `takeOverScoring()` → `POST /matches/takeover` → redirects to `/score?[match_id=&session=&]resume=<matchId>` → `resumeMatch()` rebuilds cfg/teams/engine from the DB and continues (live innings, innings break, or the result screen)
@@ -125,7 +130,7 @@ Cricket team genrator/              ← project root — ALWAYS run uvicorn from
 │   │   └── watch.html              ← live spectator view (polls /api/watch/{code} every 5s)
 │   ├── static/
 │   │   ├── manifest.json           ← PWA manifest
-│   │   ├── sw.js                   ← service worker (cache version `cricket-v5`)
+│   │   ├── sw.js                   ← service worker (cache version `cricket-v6`)
 │   │   ├── css/                    ← extracted page styles (one file per template)
 │   │   │   ├── index.css
 │   │   │   ├── profile.css
@@ -536,7 +541,7 @@ boot — do not move the Jinja vars into the static `.js` files (Jinja isn't app
 
 To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA service worker
 (`app/static/sw.js`) pre-caches all six static files at install — bump `CACHE` (currently
-`cricket-v5`) whenever you add a new top-level static asset.
+`cricket-v6`) whenever you add a new top-level static asset.
 
 ### UI Structure
 | Section | ID | Description |
@@ -625,6 +630,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 | `_runOutRuns` | integer | Runs completed before the run-out (0–3); shown as a pick row when Run Out is selected; included in `body.runs` of the ball POST |
 | `_newBatterPosition` | `'striker'`\|`'non_striker'` | Which crease the incoming batter fills; shown in new-batter modal with other-end context; swappable via `swapNewBatterPosition()` |
 | `_pendingNonStrikerId` | string\|null | Replacement non-striker UUID after a non-striker run-out; piggybacked as `metadata.new_non_striker_id` on the very next ball |
+| `_activeView` / `_allowLeave` / `_handedOver` | string / boolean / boolean | Drive `_matchInProgress()` (the leave guard): active view is scoring or innings break, the user hasn't confirmed leaving, and this device hasn't been locked out by a handover |
 | `_scorerEpoch` | `{matchId, epoch}`\|null | Epoch this device holds for the current match; `api()` sends it as `X-Scorer-Epoch` while `matchId` matches `matchState.matchId`. A `409` `SCORER_CHANGED` response calls `_showHandedOver()` |
 | `_openingPairSubmitting` | boolean | Guard flag preventing double-tap from submitting the Opening Pair modal twice (creates duplicate innings) |
 | `matchState._batTeamName` | string\|null | Name of team currently mapped to `battingTeamPlayers`; used by "Play Again" to decide whether to swap player arrays when changing which team bats first |
@@ -697,7 +703,7 @@ To add a feature: edit the matching `.html` + `.css` + `.js` files. The PWA serv
 5. `supaAuth.auth.updateUser({ password })` sets the new password; user is signed in automatically
 
 ### Service Worker
-- Cache name: `cricket-v5`
+- Cache name: `cricket-v6`
 - Shell cached on install: `/`, Google Fonts URL
 - Strategy: cache-first for shell/static, **network-first for `/api/`**
 
@@ -837,6 +843,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **`can_bowl` is a balancing hint, not a field rule**: it only affects team generation; during a match ALL players in the bowling team are eligible to bowl
 - **Email/password changes**: always browser-side via Supabase JS SDK — never add backend endpoints for these
 - **Admin API calls**: only httpx DELETE for account deletion; all other auth admin ops are browser-side
+- **Destructive or leave-the-screen actions on the score page go through `askConfirm()`** — never a bare `confirm()`, and never add a new one-tap action that deletes data or navigates away without it. Anything that navigates away mid-match must set `_allowLeave = true` first, or the `beforeunload` guard will fire
 - **One scorer per match**: the engine is client-side, so two devices scoring the same match would corrupt the timeline. Any new endpoint that writes to a match's innings/balls must call `_assert_current_scorer(match, request)`. Never expose `scorer_code` in a response model
 - **Scorekeeping is stateless**: score is always derived from `ball_events` timeline — never store a mutable score counter
 - **`_derive_batting_state()`** walks the ball timeline to compute current striker, non-striker, bowler, and over number; reads `metadata.run_out_end` to decide which end is vacated on a run-out, and `metadata.new_non_striker_id` to seat the replacement non-striker

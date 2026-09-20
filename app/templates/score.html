@@ -14,7 +14,7 @@
 <div class="wrap">
 
   <div class="page-header">
-    <a class="btn-back" href="/">← Home</a>
+    <a class="btn-back" href="/" onclick="return leaveToHome(event)">← Home</a>
     <div class="page-title">Cricket <em>Score</em></div>
     <span id="syncStatus" class="sync-pill" style="display:none"></span>
     <button class="btn-share" id="btnHandover" onclick="openHandoverModal()" style="display:none">🔁 Hand over</button>
@@ -297,7 +297,7 @@
 </div>
 <div class="bottom-bar" id="bar-viewScorecard" style="display:none">
   <button class="btnout" onclick="backToResult()">← Back to Result</button>
-  <button class="btnout" onclick="resetToSetup()">New Match</button>
+  <button class="btnout" onclick="confirmNewMatch()">New Match</button>
 </div>
 
 <!-- ── WICKET MODAL ───────────────── -->
@@ -536,6 +536,18 @@
     <div class="modal-actions" style="margin-top:14px">
       <button class="btn-cancel" onclick="closeModal('handoverModal')">Close</button>
       <button class="btn-ok green" onclick="shareHandoverWhatsApp()">WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── GENERIC "ARE YOU SURE?" — used via askConfirm() in score.js ── -->
+<div class="modal-bg" id="confirmModal">
+  <div class="modal">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p id="confirmMsg" style="font-family:'DM Mono',monospace;font-size:.8rem;color:var(--muted);margin-top:-4px;line-height:1.6"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="confirmCancel" onclick="_answerConfirm(false)">Cancel</button>
+      <button class="btn-ok green" id="confirmOk" onclick="_answerConfirm(true)">Yes</button>
     </div>
   </div>
 </div>

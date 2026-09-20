@@ -538,6 +538,12 @@ let _watchCode = null;
 let _scorerEpoch = null;
 const SCORER_CHANGED = 'Scoring was handed over to someone else';
 
+// accidental-tap guards
+let _activeView = 'viewSetup';   // tracked by showView(); scoring / innings break = a match is in progress
+let _allowLeave = false;         // set once the user has confirmed leaving, so beforeunload stays quiet
+let _handedOver = false;         // this device was locked out — nothing left to protect
+let _confirmResolve = null;
+
 // modal pick state
 let _wideRuns = 0, _nbRuns = 0, _byeRuns = 1, _byeType = 'bye', _wicketType = null;
 let _runOutTarget = 'striker';      // 'striker' | 'non_striker'
@@ -614,6 +620,67 @@ function copyShareLink() {
     });
 }
 
+// ── "Are you sure?" guards ─────────────────────────────────────────────────
+// Resolves true/false once the user taps a button. A second call cancels the first.
+function askConfirm({ title, msg, ok = 'Yes', cancel = 'Cancel', danger = false }) {
+  if (_confirmResolve) _confirmResolve(false);
+  document.getElementById('confirmTitle').textContent  = title;
+  document.getElementById('confirmMsg').textContent    = msg;
+  document.getElementById('confirmCancel').textContent = cancel;
+  const okBtn = document.getElementById('confirmOk');
+  okBtn.textContent = ok;
+  okBtn.className = 'btn-ok ' + (danger ? 'red' : 'green');
+  openModal('confirmModal');
+  return new Promise(res => { _confirmResolve = res; });
+}
+
+function _answerConfirm(yes) {
+  closeModal('confirmModal');
+  const res = _confirmResolve;
+  _confirmResolve = null;
+  if (res) res(yes);
+}
+
+function _matchInProgress() {
+  return !_allowLeave && !_handedOver && (_activeView === 'viewScoring' || _activeView === 'viewInnBreak');
+}
+
+// ← Home link: must return synchronously, so it cancels the navigation and re-navigates after a "yes".
+function leaveToHome(ev) {
+  if (!_matchInProgress()) return true;
+  ev.preventDefault();
+  askConfirm({
+    title: 'Leave the match?',
+    msg: 'Every ball scored so far is saved. But you will lose this scoring screen — to continue you would need a handover code.',
+    ok: 'Leave', cancel: 'Keep scoring', danger: true,
+  }).then(yes => { if (yes) { _allowLeave = true; location.href = '/'; } });
+  return false;
+}
+
+// Refresh / swipe-back / closing the tab mid-match
+window.addEventListener('beforeunload', e => {
+  if (_matchInProgress()) { e.preventDefault(); e.returnValue = ''; }
+});
+
+async function confirmNewMatch() {
+  if (await askConfirm({
+    title: 'Start a new match?',
+    msg: 'The finished match stays saved. You will go back to Setup with a blank form.',
+    ok: 'New match',
+  })) resetToSetup();
+}
+
+function _describeBall(b) {
+  const total = (b.runs || 0) + (b.extras || 0);
+  const runs  = `${total} run${total === 1 ? '' : 's'}`;
+  const names = { wide: 'Wide', no_ball: 'No ball', bye: 'Bye', leg_bye: 'Leg bye' };
+  if (b.event_type === 'wicket') {
+    return 'Wicket' + (b.wicket_type ? ` (${b.wicket_type.replace(/_/g, ' ')})` : '') + (total ? ` + ${runs}` : '');
+  }
+  if (names[b.event_type]) return `${names[b.event_type]} (${runs})`;
+  return total ? runs : 'Dot ball';
+}
+
 // ── Scorer handover ────────────────────────────────────────────────────────
 function _adoptEpoch(matchId, epoch) {
   _scorerEpoch = { matchId, epoch };
@@ -629,6 +696,7 @@ function _storedEpoch(matchId) {
 }
 
 function _showHandedOver() {
+  _handedOver = true;
   const watch = document.getElementById('handedOverWatch');
   if (_watchCode) { watch.href = '/watch?code=' + _watchCode; watch.style.display = 'block'; }
   document.getElementById('handedOverOverlay').style.display = 'flex';
@@ -787,6 +855,7 @@ async function _promptCreaseVacancies() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function showView(id) {
+  _activeView = id;
   document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
   document.getElementById(id).classList.add('on');
   document.querySelectorAll('.bottom-bar').forEach(b => b.style.display = 'none');
@@ -1270,8 +1339,8 @@ function confirmEndInnings() {
   const legal = sc ? sc.balls.filter(isLegal).length : 0;
   const left  = cfg.overs * 6 - legal;
   document.getElementById('endInnMsg').textContent =
-    left > 0 ? `${left} ball${left!==1?'s':''} remaining. End innings early?`
-             : 'All overs bowled.';
+    left > 0 ? `${left} ball${left!==1?'s':''} remaining. End innings early? This can't be undone.`
+             : 'All overs bowled. This can\'t be undone.';
   openModal('endInnModal');
 }
 
@@ -1594,6 +1663,15 @@ async function undoLast() {
     toast('Still syncing — try again in a moment', true);
     return;
   }
+
+  const last = engine._balls[engine._balls.length - 1];
+  if (!(await askConfirm({
+    title: 'Undo last ball?',
+    msg: `This removes: ${_describeBall(last)}. The score goes back to how it was before it.`,
+    ok: 'Undo',
+    danger: true,
+  }))) return;
+  if (ballQueue.pendingCount > 0) { toast('Still syncing — try again in a moment', true); return; }
 
   // Roll back engine state from the remaining ball history
   engine.undo(engine.overAssignments);
